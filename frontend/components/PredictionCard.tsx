@@ -24,19 +24,22 @@ export default function PredictionCard({
   const hasRange = lowerBound !== undefined && upperBound !== undefined;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm font-medium tracking-wide text-slate-500">Predicted Revenue Tomorrow</p>
-      <p className="mt-2 text-3xl font-bold text-slate-900">
+    <div className="relative overflow-hidden rounded-lg bg-white p-6 text-[#131b2e] shadow-[0_12px_32px_rgba(19,27,46,0.05)]">
+      <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#f2f3ff]" />
+      <div className="relative">
+      <p className="text-xs font-bold uppercase tracking-wider text-[#45464d]">Predicted Tomorrow</p>
+      <p className="mt-3 text-4xl font-black text-[#131b2e]">
         {loading ? "Loading..." : error ? "Unavailable" : formatCurrency(value)}
       </p>
       {loading || error || !hasRange ? (
-        <p className="mt-1 text-xs text-slate-500">Based on recent trends and historical data</p>
+        <p className="mt-2 text-sm text-[#45464d]">Based on recent trends and historical data</p>
       ) : (
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-2 text-sm text-[#45464d]">
           Expected range: {formatCurrency(lowerBound)} - {formatCurrency(upperBound)}
         </p>
       )}
       {error ? <p className="mt-2 text-xs text-amber-700">{error}</p> : null}
+      </div>
     </div>
   );
 }

@@ -229,48 +229,60 @@ export default function DashboardPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <main className="min-h-screen bg-[#faf8ff] px-4 py-6 text-[#131b2e] sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1600px]">
+        <nav className="mb-8 flex items-center justify-between rounded-lg bg-white/70 px-4 py-3 shadow-[0_12px_32px_rgba(19,27,46,0.04)] backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div className="grid h-8 w-8 place-items-center rounded-md bg-[#131b2e] text-sm font-black text-white">
+              BI
+            </div>
+            <span className="text-sm font-bold text-[#131b2e]">E-commerce Analytics</span>
+          </div>
+          <div className="hidden rounded-lg bg-[#f2f3ff] px-4 py-2 text-sm text-[#45464d] md:block">
+            Live dashboard
+          </div>
+        </nav>
+
+        <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-3xl font-black tracking-tight text-[#131b2e] sm:text-4xl">
               E-commerce Real-Time Analytics Dashboard
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-[#45464d]">
               Live operational metrics from the Olist streaming pipeline.
             </p>
           </div>
-          <div className="text-sm text-slate-500">
+          <div className="rounded-lg bg-[#f2f3ff] px-4 py-2 text-sm font-medium text-[#45464d]">
             Last updated: {lastUpdated ? lastUpdated.toLocaleString() : "-"}
           </div>
         </header>
 
         {loading ? (
-          <section className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600 shadow-sm">
+          <section className="rounded-lg bg-white p-6 text-[#45464d] shadow-[0_12px_32px_rgba(19,27,46,0.05)]">
             Loading dashboard data...
           </section>
         ) : null}
 
         {error ? (
-          <section className="mb-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          <section className="mb-6 rounded-lg bg-rose-50 p-4 text-sm text-rose-700 shadow-[0_12px_32px_rgba(19,27,46,0.04)]">
             Failed to load dashboard data: {error}
           </section>
         ) : null}
 
-        <section className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-100 px-4 py-4 sm:px-6">
+        <section className="mb-8 overflow-hidden rounded-lg bg-[#f2f3ff] p-4 shadow-[0_12px_32px_rgba(19,27,46,0.04)] sm:p-6">
+          <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Controls</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-950">Dashboard Filters</h2>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#45464d]">Controls</p>
+                <h2 className="mt-1 text-lg font-bold text-[#131b2e]">Dashboard Filters</h2>
+                <p className="mt-1 text-sm text-[#45464d]">
                   Narrow the dashboard by time, category, location, or transaction value.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setFilters({})}
-                className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                className="h-10 rounded-md bg-white px-4 text-sm font-bold text-[#131b2e] shadow-[0_8px_24px_rgba(19,27,46,0.05)] transition hover:bg-[#faf8ff]"
               >
                 Reset
               </button>
@@ -278,14 +290,14 @@ export default function DashboardPage() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               {activeFilters.length === 0 ? (
-                <span className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
+                <span className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-[#45464d]">
                   Showing all available records
                 </span>
               ) : (
                 activeFilters.map((item) => (
                   <span
                     key={`${item.label}-${item.value}`}
-                    className="rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800"
+                    className="rounded-md bg-[#6cf8bb] px-3 py-1.5 text-xs font-bold text-[#005236]"
                   >
                     {item.label}: {item.value}
                   </span>
@@ -294,8 +306,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-4">
-            <label className="block text-sm font-semibold text-slate-700">
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               Start Date
               <input
                 type="date"
@@ -303,11 +315,11 @@ export default function DashboardPage() {
                 min={filterOptions?.min_date || undefined}
                 max={filterOptions?.max_date || undefined}
                 onChange={(event) => updateFilter("startDate", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               />
             </label>
 
-            <label className="block text-sm font-semibold text-slate-700">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               End Date
               <input
                 type="date"
@@ -315,16 +327,16 @@ export default function DashboardPage() {
                 min={filterOptions?.min_date || undefined}
                 max={filterOptions?.max_date || undefined}
                 onChange={(event) => updateFilter("endDate", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               />
             </label>
 
-            <label className="block text-sm font-semibold text-slate-700">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               Product Category
               <select
                 value={filters.category ?? ""}
                 onChange={(event) => updateFilter("category", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               >
                 <option value="">All categories</option>
                 {filterOptions?.categories.map((category) => (
@@ -335,12 +347,12 @@ export default function DashboardPage() {
               </select>
             </label>
 
-            <label className="block text-sm font-semibold text-slate-700">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               Customer State
               <select
                 value={filters.state ?? ""}
                 onChange={(event) => updateFilter("state", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               >
                 <option value="">All states</option>
                 {filterOptions?.states.map((state) => (
@@ -351,7 +363,7 @@ export default function DashboardPage() {
               </select>
             </label>
 
-            <label className="block text-sm font-semibold text-slate-700">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               Min Revenue
               <input
                 type="number"
@@ -360,11 +372,11 @@ export default function DashboardPage() {
                 max={filterOptions?.max_revenue}
                 placeholder={filterOptions ? String(Math.floor(filterOptions.min_revenue)) : "0"}
                 onChange={(event) => updateFilter("minRevenue", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               />
             </label>
 
-            <label className="block text-sm font-semibold text-slate-700">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#45464d]">
               Max Revenue
               <input
                 type="number"
@@ -373,7 +385,7 @@ export default function DashboardPage() {
                 max={filterOptions?.max_revenue}
                 placeholder={filterOptions ? String(Math.ceil(filterOptions.max_revenue)) : "0"}
                 onChange={(event) => updateFilter("maxRevenue", event.target.value)}
-                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                className="mt-2 h-11 w-full rounded-md border border-[#c6c6cd]/20 bg-white px-3 text-sm font-medium normal-case tracking-normal text-[#131b2e] shadow-none outline-none focus:border-[#006591] focus:ring-4 focus:ring-[#006591]/10"
               />
             </label>
           </div>
@@ -389,6 +401,8 @@ export default function DashboardPage() {
             title="Total Revenue"
             value={formatCurrency(metrics.totalRevenue)}
             subtitle="Filtered payment_value from loaded batches"
+            variant="dark"
+            badge="Live"
           />
           <PredictionCard
             value={metrics.predictedRevenue}
@@ -406,7 +420,7 @@ export default function DashboardPage() {
             xKey="date"
             yKey="revenue"
             yAxisLabel="Revenue"
-            stroke="#0f766e"
+            stroke="#006c49"
           />
 
           <LineChartCard
@@ -415,7 +429,7 @@ export default function DashboardPage() {
             xKey="date"
             yKey="count"
             yAxisLabel="Orders"
-            stroke="#1d4ed8"
+            stroke="#006591"
           />
 
           <div className="xl:col-span-2">
@@ -425,7 +439,7 @@ export default function DashboardPage() {
               xKey="date"
               yKey="total_rows"
               yAxisLabel="Cumulative Rows"
-              stroke="#be123c"
+              stroke="#d40036"
             />
           </div>
         </section>
@@ -436,7 +450,7 @@ export default function DashboardPage() {
 
         <section className="mt-8">
           <div className="mb-4">
-            <h2 className="text-xl font-semibold text-slate-900">Business Intelligence</h2>
+            <h2 className="text-xl font-black text-[#131b2e]">Business Intelligence</h2>
             {biError ? <p className="mt-1 text-sm text-amber-700">{biError}</p> : null}
           </div>
 
@@ -447,7 +461,7 @@ export default function DashboardPage() {
               xKey="category"
               yKey="revenue"
               yAxisLabel="Revenue"
-              fill="#0f766e"
+              fill="#00a889"
             />
 
             <CustomerSegmentationChart data={state.customerSegmentation} />
@@ -458,7 +472,7 @@ export default function DashboardPage() {
               xKey="day"
               yKey="avg_revenue"
               yAxisLabel="Avg Revenue"
-              fill="#2563eb"
+              fill="#006591"
             />
 
             <BarChartCard
@@ -467,7 +481,7 @@ export default function DashboardPage() {
               xKey="state"
               yKey="revenue"
               yAxisLabel="Revenue"
-              fill="#be123c"
+              fill="#d40036"
             />
 
             <InsightList
@@ -482,8 +496,8 @@ export default function DashboardPage() {
               emptyMessage="No recommendations available yet ⚠️"
             />
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6 xl:col-span-2">
-              <h2 className="text-lg font-semibold text-slate-900">Model Metrics</h2>
+            <section className="rounded-lg bg-[#f2f3ff] p-5 shadow-[0_12px_32px_rgba(19,27,46,0.04)] sm:p-6 xl:col-span-2">
+              <h2 className="text-lg font-black text-[#131b2e]">Model Metrics</h2>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
                   title="MAE"

@@ -93,30 +93,40 @@ def build_daily_revenue_dataset(raw_df: pd.DataFrame) -> pd.DataFrame:
     daily.loc[missing_mask, TARGET_COLUMN] = interpolated.loc[missing_mask]
     daily[TARGET_COLUMN] = daily[TARGET_COLUMN].ffill().bfill().fillna(0.0)
 
+    return build_time_series_features(daily)
+
+
+def build_time_series_features(daily: pd.DataFrame) -> pd.DataFrame:
+    if daily.empty:
+        return pd.DataFrame(columns=["date", TARGET_COLUMN, *FEATURE_COLUMNS])
+
+    daily = daily.copy()
+    daily["date"] = pd.to_datetime(daily["date"], errors="coerce")
+    daily[TARGET_COLUMN] = pd.to_numeric(daily[TARGET_COLUMN], errors="coerce").fillna(0.0)
+    daily = daily.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+
     daily["day_of_week"] = daily["date"].dt.dayofweek
     daily["day_of_month"] = daily["date"].dt.day
     daily["month"] = daily["date"].dt.month
     daily["quarter"] = daily["date"].dt.quarter
     daily["is_weekend"] = daily["day_of_week"].isin([5, 6]).astype(int)
 
+    revenue_history = daily[TARGET_COLUMN].shift(1)
     for lag in [1, 2, 3, 7]:
         daily[f"lag_{lag}"] = daily[TARGET_COLUMN].shift(lag)
 
-    daily["rolling_mean_3"] = daily[TARGET_COLUMN].rolling(window=3, min_periods=1).mean()
-    daily["rolling_mean_7"] = daily[TARGET_COLUMN].rolling(window=7, min_periods=1).mean()
-    daily["rolling_mean_14"] = daily[TARGET_COLUMN].rolling(window=14, min_periods=1).mean()
+    daily["rolling_mean_3"] = revenue_history.rolling(window=3, min_periods=1).mean()
+    daily["rolling_mean_7"] = revenue_history.rolling(window=7, min_periods=1).mean()
+    daily["rolling_mean_14"] = revenue_history.rolling(window=14, min_periods=1).mean()
     daily["rolling_std_7"] = (
-        daily[TARGET_COLUMN].rolling(window=7, min_periods=2).std(ddof=0).fillna(0.0)
+        revenue_history.rolling(window=7, min_periods=2).std(ddof=0).fillna(0.0)
     )
-    daily["revenue_change_1"] = daily[TARGET_COLUMN].diff(1)
+    daily["revenue_change_1"] = revenue_history.diff(1)
 
     for feature in FEATURE_COLUMNS:
         daily[feature] = pd.to_numeric(daily[feature], errors="coerce")
 
-    lag_columns = ["lag_1", "lag_2", "lag_3", "lag_7"]
-    daily[lag_columns] = daily[lag_columns].ffill().bfill().fillna(0.0)
-    daily["revenue_change_1"] = daily["revenue_change_1"].fillna(0.0)
-    daily["rolling_std_7"] = daily["rolling_std_7"].fillna(0.0)
+    daily[FEATURE_COLUMNS] = daily[FEATURE_COLUMNS].ffill().bfill().fillna(0.0)
 
     return daily
 
@@ -164,10 +174,22 @@ def _new_revenue_model() -> XGBRegressor:
     )
 
 
+def _time_based_train_test_split(training_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if len(training_df) < 5:
+        return training_df, training_df.iloc[0:0]
+
+    split_index = max(1, int(len(training_df) * 0.8))
+    if split_index >= len(training_df):
+        split_index = len(training_df) - 1
+
+    return training_df.iloc[:split_index], training_df.iloc[split_index:]
+
+
 def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
     training_df = _clean_training_dataframe(ml_df)
-    x = training_df[FEATURE_COLUMNS].to_numpy(dtype=float)
-    y = training_df[TARGET_COLUMN].to_numpy(dtype=float)
+    train_df, _ = _time_based_train_test_split(training_df)
+    x = train_df[FEATURE_COLUMNS].to_numpy(dtype=float)
+    y = train_df[TARGET_COLUMN].to_numpy(dtype=float)
 
     model = _new_revenue_model()
     model.fit(x, y)
@@ -190,8 +212,12 @@ def _calculate_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dic
     }
 
 
-def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float | int]:
-    if len(training_df) < 5:
+def _evaluate_model(
+    model: XGBRegressor,
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+) -> dict[str, float | int]:
+    if test_df.empty:
         return {
             "mae": 0.0,
             "rmse": 0.0,
@@ -201,22 +227,9 @@ def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float | int]:
             "baseline_mape": 0.0,
             "baseline_improvement_pct": 0.0,
             "residual_std": 0.0,
-            "training_rows": int(len(training_df)),
+            "training_rows": int(len(train_df)),
             "test_rows": 0,
         }
-
-    split_index = max(1, int(len(training_df) * 0.8))
-    if split_index >= len(training_df):
-        split_index = len(training_df) - 1
-
-    train_df = training_df.iloc[:split_index]
-    test_df = training_df.iloc[split_index:]
-
-    model = _new_revenue_model()
-    model.fit(
-        train_df[FEATURE_COLUMNS].to_numpy(dtype=float),
-        train_df[TARGET_COLUMN].to_numpy(dtype=float),
-    )
 
     x_test = test_df[FEATURE_COLUMNS].to_numpy(dtype=float)
     y_true = test_df[TARGET_COLUMN].to_numpy(dtype=float)
@@ -248,10 +261,16 @@ def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float | int]:
 def train_and_save_model() -> dict[str, Any]:
     ml_df = prepare_ml_dataframe()
     training_df = _clean_training_dataframe(ml_df)
+    train_df, test_df = _time_based_train_test_split(training_df)
 
-    model = train_revenue_model(ml_df)
-    metrics = _evaluate_model(training_df)
-    shap_summary = _build_shap_summary(model, training_df[FEATURE_COLUMNS])
+    model = _new_revenue_model()
+    model.fit(
+        train_df[FEATURE_COLUMNS].to_numpy(dtype=float),
+        train_df[TARGET_COLUMN].to_numpy(dtype=float),
+    )
+
+    metrics = _evaluate_model(model, train_df, test_df)
+    shap_summary = _build_shap_summary(model, train_df[FEATURE_COLUMNS])
     last_trained_at = datetime.now(timezone.utc).isoformat()
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)

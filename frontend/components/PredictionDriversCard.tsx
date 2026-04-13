@@ -46,32 +46,32 @@ export default function PredictionDriversCard({
   const topGlobal = globalImportance.slice(0, 5);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6 xl:col-span-2">
-      <h2 className="text-lg font-semibold text-slate-900">Why the Forecast Changed</h2>
-      <p className="mt-1 text-sm text-slate-600">
+    <section className="rounded-lg bg-white p-5 shadow-[0_12px_32px_rgba(19,27,46,0.05)] sm:p-6 xl:col-span-2">
+      <h2 className="text-lg font-bold text-[#131b2e]">Why the Forecast Changed</h2>
+      <p className="mt-1 text-sm text-[#45464d]">
         Positive values pushed tomorrow's revenue forecast higher. Negative values pulled it lower.
       </p>
       {error ? <p className="mt-2 text-sm text-amber-700">{error}</p> : null}
 
       <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
-          <h3 className="text-sm font-semibold text-slate-700">Tomorrow's main drivers</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#45464d]">Tomorrow's main drivers</h3>
           {drivers.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-600">No driver data available</p>
+            <p className="mt-3 text-sm text-[#45464d]">No driver data available</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {drivers.map((item) => (
                 <li
                   key={item.feature}
-                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-[#f2f3ff] px-3 py-2 text-sm"
                 >
-                  <span className="min-w-0 whitespace-normal break-words text-slate-700">
+                  <span className="min-w-0 whitespace-normal break-words text-[#45464d]">
                     {formatFeatureName(item.feature)}
                   </span>
                   <span
                     className={
                       item.impact >= 0
-                        ? "whitespace-nowrap text-right font-semibold text-emerald-700"
+                        ? "whitespace-nowrap text-right font-semibold text-[#006c49]"
                         : "whitespace-nowrap text-right font-semibold text-rose-700"
                     }
                   >
@@ -84,20 +84,20 @@ export default function PredictionDriversCard({
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold text-slate-700">Most important signals overall</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#45464d]">Most important signals overall</h3>
           {topGlobal.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-600">No global importance data available</p>
+            <p className="mt-3 text-sm text-[#45464d]">No global importance data available</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {topGlobal.map((item) => (
                 <li
                   key={item.feature}
-                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-[#faf8ff] px-3 py-2 text-sm"
                 >
-                  <span className="min-w-0 whitespace-normal break-words text-slate-700">
+                  <span className="min-w-0 whitespace-normal break-words text-[#45464d]">
                     {formatFeatureName(item.feature)}
                   </span>
-                  <span className="whitespace-nowrap text-right font-semibold text-slate-900">
+                  <span className="whitespace-nowrap text-right font-semibold text-[#131b2e]">
                     {item.mean_abs_shap.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </span>
                 </li>

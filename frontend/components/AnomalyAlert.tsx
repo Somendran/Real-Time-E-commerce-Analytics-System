@@ -24,17 +24,17 @@ export default function AnomalyAlert({ anomalies, loading = false, error = null 
     .slice(0, 3);
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-6">
-      <h2 className="text-lg font-semibold text-slate-900">Anomaly Alerts</h2>
-      <p className="mt-1 text-sm text-slate-700">Automated checks for unusual revenue spikes using Z-score.</p>
+    <section className="rounded-lg bg-[#fff8e8] p-5 text-[#4f2d00] shadow-[0_12px_32px_rgba(79,45,0,0.06)] sm:p-6">
+      <h2 className="text-lg font-bold">Anomaly Alerts</h2>
+      <p className="mt-1 text-sm opacity-80">Automated checks for unusual revenue spikes using Z-score.</p>
 
       <div className="mt-4">
         {loading ? (
-          <p className="text-sm text-slate-600">Loading anomaly signals...</p>
+          <p className="text-sm opacity-80">Loading anomaly signals...</p>
         ) : error ? (
           <p className="text-sm text-amber-800">Unable to load anomalies: {error}</p>
         ) : latestThree.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+          <p className="rounded-lg bg-white/80 px-3 py-2 text-sm text-[#45464d]">
             No anomalies detected
           </p>
         ) : (
@@ -42,7 +42,7 @@ export default function AnomalyAlert({ anomalies, loading = false, error = null 
             {latestThree.map((item) => (
               <li
                 key={`${item.date}-${item.z_score}`}
-                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+                className="rounded-lg bg-white/85 px-3 py-2 text-sm text-rose-900 shadow-[0_6px_18px_rgba(79,45,0,0.04)]"
               >
                 <span className="font-semibold">⚠️ Unusual spike detected on {item.date}</span>
                 <span className="ml-2 text-rose-800">

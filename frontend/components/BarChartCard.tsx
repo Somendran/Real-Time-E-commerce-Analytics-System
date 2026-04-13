@@ -29,28 +29,34 @@ export default function BarChartCard({
   fill,
 }: BarChartCardProps) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+    <section className="rounded-lg bg-white p-5 shadow-[0_12px_32px_rgba(19,27,46,0.05)] sm:p-6">
+      <h2 className="text-lg font-bold text-[#131b2e]">{title}</h2>
       <div className="mt-4 h-72 w-full sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f2f3ff" />
             <XAxis
               dataKey={xKey}
               interval={0}
               minTickGap={12}
-              tick={{ fill: "#475569", fontSize: 12 }}
+              tick={{ fill: "#45464d", fontSize: 12 }}
               tickMargin={10}
             />
-            <YAxis tick={{ fill: "#475569", fontSize: 12 }}>
+            <YAxis tick={{ fill: "#45464d", fontSize: 12 }}>
               <Label
                 value={yAxisLabel}
                 angle={-90}
                 position="insideLeft"
-                style={{ fill: "#475569", textAnchor: "middle" }}
+                style={{ fill: "#45464d", textAnchor: "middle" }}
               />
             </YAxis>
-            <Tooltip />
+            <Tooltip
+              contentStyle={{
+                border: "none",
+                borderRadius: 8,
+                boxShadow: "0 12px 32px rgba(19,27,46,0.08)",
+              }}
+            />
             <Bar dataKey={yKey} fill={fill} radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
