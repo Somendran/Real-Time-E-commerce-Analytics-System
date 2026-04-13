@@ -50,14 +50,23 @@ Automated CI running backend tests and frontend build checks.
 
 ## Architecture
 
-```text
-Olist CSV files
-  -> Pandas cleaning pipeline
-  -> Incremental batch files
-  -> Supabase PostgreSQL orders_clean
-  -> FastAPI analytics and ML API
-  -> Next.js BI dashboard
+```mermaid
+flowchart LR
+    raw["Olist CSV files<br/>data/raw"] --> prep["Pandas data preparation<br/>pipeline/prepare_data.py"]
+    prep --> clean["Clean dataset<br/>data/orders_clean.csv"]
+    clean --> batches["Incremental batches<br/>data_batches/batch_*.csv"]
+    batches --> loader["Batch loader + validation<br/>run_pipeline.py"]
+    loader --> db[("PostgreSQL / Supabase<br/>orders_clean")]
+    loader --> train["Model training<br/>train_and_save_model()"]
+    train --> artifact["Saved model + metrics<br/>backend/models"]
+    db --> api["FastAPI backend<br/>analytics + BI + ML endpoints"]
+    artifact --> api
+    api --> ui["Next.js dashboard<br/>KPIs, charts, filters, insights"]
+    api --> docs["FastAPI docs<br/>/docs"]
+    db -. "optional local dev" .-> docker["Docker Compose<br/>Postgres + backend + frontend"]
 ```
+
+The same application can run against Supabase or against the local PostgreSQL service defined in Docker Compose.
 
 ## Project Structure
 
@@ -439,7 +448,6 @@ The workflow:
 
 ## Future Improvements
 
-- Add a dedicated architecture diagram image
 - Add model versioning and model registry metadata
 - Add Alembic migrations
 - Add authentication and role-based access
