@@ -1,0 +1,27 @@
+# Python virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Local environment secrets
+.env
+.env.local
+
+# Airflow local artifacts
+airflow.db
+logs/
+
+# Generated pipeline outputs/state
+data/orders_clean.csv
+data_batches/batch_*.csv
+current_batch.txt
+
+# Frontend artifacts
+node_modules/
+.next/
+frontend/node_modules/
+frontend/.next/

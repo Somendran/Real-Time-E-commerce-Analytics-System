@@ -1,0 +1,17 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "terminal.integrated.defaultProfile.windows": "PowerShell (Project Venv)",
+  "terminal.integrated.profiles.windows": {
+    "PowerShell (Project Venv)": {
+      "source": "PowerShell",
+      "args": [
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "& \"${workspaceFolder}\\.venv\\Scripts\\Activate.ps1\""
+      ]
+    }
+  }
+}
