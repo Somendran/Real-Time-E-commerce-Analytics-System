@@ -262,6 +262,8 @@ The pipeline uses this SQL file when creating the `orders_clean` table.
 
 ### Option A: Docker Compose
 
+Docker Compose has been validated for local startup with PostgreSQL, FastAPI, and Next.js.
+
 Start local Postgres, FastAPI, and Next.js:
 
 ```powershell
