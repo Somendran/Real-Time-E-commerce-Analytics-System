@@ -91,6 +91,45 @@ export type GeoAnalysisPoint = {
   revenue: number;
 };
 
+export type CohortRetentionPoint = {
+  cohort_month: string;
+  retention: number[];
+};
+
+export type CohortRetentionResponse = {
+  cohorts: CohortRetentionPoint[];
+};
+
+export type RevenueDecompositionResponse = {
+  total_change_pct: number;
+  order_contribution_pct: number;
+  aov_contribution_pct: number;
+};
+
+export type ChurnRiskResponse = {
+  high_risk_customers: number;
+  potential_revenue_loss: number;
+};
+
+export type AnomalyExplanationPoint = {
+  date: string;
+  top_category: string;
+  category_increase_pct: number;
+  top_state: string;
+  state_increase_pct: number;
+};
+
+export type AnomalyExplanationResponse = AnomalyExplanationPoint[];
+
+export type CustomerLTVPoint = {
+  customer_id: string;
+  ltv: number;
+};
+
+export type CustomerLTVResponse = {
+  top_customers: CustomerLTVPoint[];
+};
+
 export type DashboardFilters = {
   startDate?: string;
   endDate?: string;
@@ -311,6 +350,59 @@ export async function getFilterOptions(): Promise<FilterOptions> {
   };
 }
 
+export async function getCohortRetention(): Promise<CohortRetentionResponse> {
+  const payload = await fetchJson<CohortRetentionResponse>("/cohort-retention");
+
+  return {
+    cohorts: (payload.cohorts ?? []).map((cohort) => ({
+      cohort_month: cohort.cohort_month,
+      retention: (cohort.retention ?? []).map((value) => Number(value ?? 0)),
+    })),
+  };
+}
+
+export async function getRevenueDecomposition(): Promise<RevenueDecompositionResponse> {
+  const payload = await fetchJson<RevenueDecompositionResponse>("/revenue-decomposition");
+
+  return {
+    total_change_pct: Number(payload.total_change_pct ?? 0),
+    order_contribution_pct: Number(payload.order_contribution_pct ?? 0),
+    aov_contribution_pct: Number(payload.aov_contribution_pct ?? 0),
+  };
+}
+
+export async function getChurnRisk(): Promise<ChurnRiskResponse> {
+  const payload = await fetchJson<ChurnRiskResponse>("/churn-risk");
+
+  return {
+    high_risk_customers: Number(payload.high_risk_customers ?? 0),
+    potential_revenue_loss: Number(payload.potential_revenue_loss ?? 0),
+  };
+}
+
+export async function getAnomalyExplanation(): Promise<AnomalyExplanationResponse> {
+  const payload = await fetchJson<AnomalyExplanationResponse>("/anomaly-explanation");
+
+  return (payload ?? []).map((row) => ({
+    date: row.date,
+    top_category: row.top_category,
+    category_increase_pct: Number(row.category_increase_pct ?? 0),
+    top_state: row.top_state,
+    state_increase_pct: Number(row.state_increase_pct ?? 0),
+  }));
+}
+
+export async function getCustomerLTV(limit = 10): Promise<CustomerLTVResponse> {
+  const payload = await fetchJson<CustomerLTVResponse>(`/customer-ltv?limit=${limit}`);
+
+  return {
+    top_customers: (payload.top_customers ?? []).map((row) => ({
+      customer_id: row.customer_id,
+      ltv: Number(row.ltv ?? 0),
+    })),
+  };
+}
+
 export async function getDashboardData(filters: DashboardFilters = {}) {
   const [
     metrics,
@@ -327,6 +419,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     geoAnalysisResult,
     modelMetricsResult,
     predictionExplanationResult,
+    cohortRetentionResult,
+    revenueDecompositionResult,
+    churnRiskResult,
+    anomalyExplanationResult,
+    customerLTVResult,
   ] = await Promise.allSettled([
     getMetrics(filters),
     getDailyRevenue(filters),
@@ -342,6 +439,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     getGeoAnalysis(filters),
     getModelMetrics(),
     getPredictionExplanation(),
+    getCohortRetention(),
+    getRevenueDecomposition(),
+    getChurnRisk(),
+    getAnomalyExplanation(),
+    getCustomerLTV(10),
   ]);
 
   if (metrics.status !== "fulfilled") {
@@ -380,6 +482,20 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       predictionExplanationResult.status === "fulfilled"
         ? predictionExplanationResult.value
         : { predicted_revenue: 0, top_features: [], global_feature_importance: [] },
+    cohortRetention:
+      cohortRetentionResult.status === "fulfilled" ? cohortRetentionResult.value : { cohorts: [] },
+    revenueDecomposition:
+      revenueDecompositionResult.status === "fulfilled"
+        ? revenueDecompositionResult.value
+        : { total_change_pct: 0, order_contribution_pct: 0, aov_contribution_pct: 0 },
+    churnRisk:
+      churnRiskResult.status === "fulfilled"
+        ? churnRiskResult.value
+        : { high_risk_customers: 0, potential_revenue_loss: 0 },
+    anomalyExplanation:
+      anomalyExplanationResult.status === "fulfilled" ? anomalyExplanationResult.value : [],
+    customerLTV:
+      customerLTVResult.status === "fulfilled" ? customerLTVResult.value : { top_customers: [] },
     predictionError:
       predictionResult.status === "rejected"
         ? "Prediction service unavailable"
@@ -400,6 +516,14 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     explanationError:
       predictionExplanationResult.status === "rejected"
         ? "Prediction explanation unavailable"
+        : null,
+    advancedInsightsError:
+      cohortRetentionResult.status === "rejected" ||
+      revenueDecompositionResult.status === "rejected" ||
+      churnRiskResult.status === "rejected" ||
+      anomalyExplanationResult.status === "rejected" ||
+      customerLTVResult.status === "rejected"
+        ? "Some advanced insights are temporarily unavailable"
         : null,
   };
 }

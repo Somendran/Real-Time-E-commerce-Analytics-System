@@ -11,8 +11,8 @@ Dataset source: [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggl
 - Ingests and cleans raw Olist CSV files
 - Splits clean data into incremental batch files
 - Loads one batch per run into PostgreSQL with conflict-safe upserts
-- Serves KPI, trend, BI, ML, anomaly, and geo-analysis endpoints through FastAPI
-- Displays KPIs, charts, filters, recommendations, anomaly alerts, and model metrics in a Next.js dashboard
+- Serves KPI, trend, BI, advanced analytics, ML, anomaly, and geo-analysis endpoints through FastAPI
+- Displays KPIs, charts, filters, recommendations, anomaly alerts, model metrics, and advanced insights in a Next.js dashboard
 - Persists an XGBoost revenue prediction model to disk instead of retraining on every request
 - Includes pytest coverage and GitHub Actions CI
 
@@ -61,7 +61,7 @@ flowchart LR
     train --> artifact["Saved model + metrics<br/>backend/models"]
     db --> api["FastAPI backend<br/>analytics + BI + ML endpoints"]
     artifact --> api
-    api --> ui["Next.js dashboard<br/>KPIs, charts, filters, insights"]
+    api --> ui["Next.js dashboard<br/>KPIs, charts, filters, insights, advanced analytics"]
     api --> docs["FastAPI docs<br/>/docs"]
     db -. "optional local dev" .-> docker["Docker Compose<br/>Postgres + backend + frontend"]
 ```
@@ -72,6 +72,7 @@ The same application can run against Supabase or against the local PostgreSQL se
 
 ```text
 backend/
+  advanced_analytics.py
   app.py
   db.py
   ml.py
@@ -153,6 +154,7 @@ FastAPI serves:
 - anomaly detection
 - next-day revenue prediction
 - model evaluation metrics
+- advanced analytics for cohort retention, revenue decomposition, churn risk, anomaly root cause, and customer LTV
 
 ### BI Dashboard
 
@@ -171,7 +173,25 @@ The Next.js dashboard includes:
 - anomaly alerts
 - key insights
 - recommendations
+- advanced insights:
+  - cohort retention table
+  - revenue decomposition summary
+  - churn risk KPIs
+  - anomaly explanation panel
+  - customer LTV table
 - filters for date range, product category, customer state, and revenue range
+
+### Advanced Analytics
+
+The advanced analytics layer uses Pandas computations on `orders_clean` to answer higher-level business questions:
+
+- cohort retention by first purchase month
+- revenue change split into order volume and average order value impact
+- churn risk based on recent inactivity and declining customer activity
+- anomaly root cause analysis by top category and top state
+- customer lifetime value ranking
+
+These features are exposed through FastAPI and rendered in the dashboard under **Advanced Insights**.
 
 ### Machine Learning
 
@@ -236,6 +256,16 @@ GET  /prediction-explanation
 GET  /anomalies
 GET  /model-metrics
 POST /train-model
+```
+
+Advanced analytics endpoints:
+
+```text
+GET /cohort-retention
+GET /revenue-decomposition
+GET /churn-risk
+GET /anomaly-explanation
+GET /customer-ltv
 ```
 
 Filterable endpoints support:
@@ -442,6 +472,11 @@ The workflow:
 - Which customer states generate the most revenue?
 - Is revenue trending up or down?
 - Are there unusual revenue spikes?
+- What categories and states explain anomaly dates?
+- Which customer cohorts keep returning over time?
+- How much of revenue movement comes from order volume vs average order value?
+- How many customers are at churn risk, and what revenue could be lost?
+- Which customers have the highest estimated lifetime value?
 - What actions should the business take next?
 - What is the next-day revenue forecast?
 - How accurate is the current model?
@@ -453,6 +488,7 @@ The workflow:
 - No authentication or role-based access is implemented yet.
 - Database migrations use a SQL file, not Alembic.
 - CI does not spin up a real PostgreSQL/Supabase database yet.
+- Advanced analytics endpoints currently compute on demand with Pandas rather than using cached materialized views.
 - Full local reproduction requires downloading the Olist CSV files from Kaggle.
 
 ## Future Improvements
@@ -462,6 +498,8 @@ The workflow:
 - Add authentication and role-based access
 - Replace simulated batching with Kafka, Redpanda, Kinesis, or Pub/Sub
 - Add alert delivery through email, Slack, or webhooks
+- Cache advanced analytics outputs or move heavier aggregations into materialized views
+- Deploy frontend and backend with production environment variables
 
 ## License
 

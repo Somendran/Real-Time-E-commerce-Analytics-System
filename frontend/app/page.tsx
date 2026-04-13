@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import AdvancedInsightsSection from "../components/AdvancedInsightsSection";
 import AnomalyAlert from "../components/AnomalyAlert";
 import BarChartCard from "../components/BarChartCard";
 import CustomerSegmentationChart from "../components/CustomerSegmentationChart";
@@ -12,7 +13,11 @@ import PredictionCard from "../components/PredictionCard";
 import PredictionDriversCard from "../components/PredictionDriversCard";
 import {
   type Anomaly,
+  type AnomalyExplanationResponse,
   type CategoryAnalysisPoint,
+  type ChurnRiskResponse,
+  type CohortRetentionResponse,
+  type CustomerLTVResponse,
   type CustomerSegmentPoint,
   type DashboardFilters,
   type FilterOptions,
@@ -25,6 +30,7 @@ import {
   type Prediction,
   type PredictionExplanation,
   type Recommendation,
+  type RevenueDecompositionResponse,
   type RevenuePoint,
   type WeekdayAnalysisPoint,
   getDashboardData,
@@ -46,6 +52,11 @@ type DashboardState = {
   geoAnalysis: GeoAnalysisPoint[];
   modelMetrics: ModelMetrics;
   predictionExplanation: PredictionExplanation;
+  cohortRetention: CohortRetentionResponse;
+  revenueDecomposition: RevenueDecompositionResponse;
+  churnRisk: ChurnRiskResponse;
+  anomalyExplanation: AnomalyExplanationResponse;
+  customerLTV: CustomerLTVResponse;
 };
 
 const REFRESH_INTERVAL_MS = 30000;
@@ -70,6 +81,15 @@ const DEFAULT_PREDICTION_EXPLANATION: PredictionExplanation = {
   predicted_revenue: 0,
   top_features: [],
   global_feature_importance: [],
+};
+const DEFAULT_REVENUE_DECOMPOSITION: RevenueDecompositionResponse = {
+  total_change_pct: 0,
+  order_contribution_pct: 0,
+  aov_contribution_pct: 0,
+};
+const DEFAULT_CHURN_RISK: ChurnRiskResponse = {
+  high_risk_customers: 0,
+  potential_revenue_loss: 0,
 };
 
 function formatCurrency(value: number) {
@@ -96,6 +116,11 @@ export default function DashboardPage() {
     geoAnalysis: [],
     modelMetrics: DEFAULT_MODEL_METRICS,
     predictionExplanation: DEFAULT_PREDICTION_EXPLANATION,
+    cohortRetention: { cohorts: [] },
+    revenueDecomposition: DEFAULT_REVENUE_DECOMPOSITION,
+    churnRisk: DEFAULT_CHURN_RISK,
+    anomalyExplanation: [],
+    customerLTV: { top_customers: [] },
   });
   const [filters, setFilters] = useState<DashboardFilters>({});
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
@@ -106,6 +131,7 @@ export default function DashboardPage() {
   const [anomalyError, setAnomalyError] = useState<string | null>(null);
   const [biError, setBiError] = useState<string | null>(null);
   const [explanationError, setExplanationError] = useState<string | null>(null);
+  const [advancedInsightsError, setAdvancedInsightsError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -117,6 +143,7 @@ export default function DashboardPage() {
       setAnomalyError(data.anomalyError);
       setBiError(data.biError);
       setExplanationError(data.explanationError);
+      setAdvancedInsightsError(data.advancedInsightsError);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown API error";
       setError(message);
@@ -124,6 +151,7 @@ export default function DashboardPage() {
       setAnomalyError("Anomaly endpoint temporarily unavailable");
       setBiError("BI insights temporarily unavailable");
       setExplanationError("Prediction explanation unavailable");
+      setAdvancedInsightsError("Advanced insights temporarily unavailable");
     } finally {
       setLoading(false);
     }
@@ -560,6 +588,15 @@ export default function DashboardPage() {
             />
           </div>
         </section>
+
+        <AdvancedInsightsSection
+          cohortRetention={state.cohortRetention}
+          revenueDecomposition={state.revenueDecomposition}
+          churnRisk={state.churnRisk}
+          anomalyExplanation={state.anomalyExplanation}
+          customerLTV={state.customerLTV}
+          error={advancedInsightsError}
+        />
       </div>
     </main>
   );

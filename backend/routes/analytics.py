@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from backend.advanced_analytics import (
+    calculate_anomaly_root_cause,
+    calculate_churn_risk,
+    calculate_cohort_retention,
+    calculate_customer_ltv,
+    calculate_revenue_decomposition,
+    fetch_orders_clean_dataframe,
+)
 from backend.db import fetch_all, fetch_one
 from backend.ml import (
     detect_anomalies,
@@ -625,6 +633,122 @@ def get_geo_analysis(
         ]
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to fetch geo analysis") from exc
+
+
+@router.get(
+    "/cohort-retention",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "cohorts": [
+                            {"cohort_month": "2017-01", "retention": [100.0, 45.0, 30.0, 20.0]}
+                        ]
+                    }
+                }
+            }
+        }
+    },
+)
+def get_cohort_retention():
+    try:
+        return calculate_cohort_retention(fetch_orders_clean_dataframe())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to calculate cohort retention") from exc
+
+
+@router.get(
+    "/revenue-decomposition",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_change_pct": 12.5,
+                        "order_contribution_pct": 8.2,
+                        "aov_contribution_pct": 4.3,
+                    }
+                }
+            }
+        }
+    },
+)
+def get_revenue_decomposition():
+    try:
+        return calculate_revenue_decomposition(fetch_orders_clean_dataframe())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to calculate revenue decomposition") from exc
+
+
+@router.get(
+    "/churn-risk",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {"high_risk_customers": 128, "potential_revenue_loss": 45231.75}
+                }
+            }
+        }
+    },
+)
+def get_churn_risk():
+    try:
+        return calculate_churn_risk(fetch_orders_clean_dataframe())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to calculate churn risk") from exc
+
+
+@router.get(
+    "/anomaly-explanation",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "date": "2017-03-20",
+                            "top_category": "furniture_decor",
+                            "category_increase_pct": 86.4,
+                            "top_state": "SP",
+                            "state_increase_pct": 74.2,
+                        }
+                    ]
+                }
+            }
+        }
+    },
+)
+def get_anomaly_explanation(anomaly_date: list[str] | None = Query(default=None)):
+    try:
+        return calculate_anomaly_root_cause(fetch_orders_clean_dataframe(), anomaly_date)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to explain anomalies") from exc
+
+
+@router.get(
+    "/customer-ltv",
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "top_customers": [
+                            {"customer_id": "customer_123", "ltv": 1299.5},
+                            {"customer_id": "customer_456", "ltv": 1175.25},
+                        ]
+                    }
+                }
+            }
+        }
+    },
+)
+def get_customer_ltv(limit: int = Query(default=10, ge=1, le=100)):
+    try:
+        return calculate_customer_ltv(fetch_orders_clean_dataframe(), limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to calculate customer LTV") from exc
 
 
 @router.get("/filter-options")
