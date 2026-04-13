@@ -20,12 +20,40 @@ export type GrowthPoint = {
 
 export type Prediction = {
   predicted_revenue: number;
+  lower_bound?: number;
+  upper_bound?: number;
+};
+
+export type PredictionDriver = {
+  feature: string;
+  value: number;
+  impact: number;
+};
+
+export type GlobalFeatureImportance = {
+  feature: string;
+  mean_abs_shap: number;
+};
+
+export type PredictionExplanation = Prediction & {
+  top_features: PredictionDriver[];
+  global_feature_importance: GlobalFeatureImportance[];
 };
 
 export type ModelMetrics = {
+  model_type?: string | null;
+  model_version?: string | null;
+  features?: string[];
   mae: number | null;
   rmse: number | null;
   mape: number | null;
+  baseline_mae?: number | null;
+  baseline_rmse?: number | null;
+  baseline_mape?: number | null;
+  baseline_improvement_pct?: number | null;
+  residual_std?: number | null;
+  training_rows?: number | null;
+  test_rows?: number | null;
   last_trained_at: string | null;
 };
 
@@ -160,12 +188,42 @@ export async function getDataGrowth(filters: DashboardFilters = {}): Promise<Gro
 }
 
 export async function getPrediction(): Promise<Prediction> {
-  const payload = await fetchJson<{ predicted_revenue?: number; data?: { predicted_revenue?: number } }>(
-    "/prediction",
-  );
+  const payload = await fetchJson<{
+    predicted_revenue?: number;
+    lower_bound?: number;
+    upper_bound?: number;
+    data?: { predicted_revenue?: number; lower_bound?: number; upper_bound?: number };
+  }>("/prediction");
 
   return {
     predicted_revenue: Number(payload.predicted_revenue ?? payload.data?.predicted_revenue ?? 0),
+    lower_bound:
+      payload.lower_bound !== undefined || payload.data?.lower_bound !== undefined
+        ? Number(payload.lower_bound ?? payload.data?.lower_bound)
+        : undefined,
+    upper_bound:
+      payload.upper_bound !== undefined || payload.data?.upper_bound !== undefined
+        ? Number(payload.upper_bound ?? payload.data?.upper_bound)
+        : undefined,
+  };
+}
+
+export async function getPredictionExplanation(): Promise<PredictionExplanation> {
+  const payload = await fetchJson<PredictionExplanation>("/prediction-explanation");
+
+  return {
+    predicted_revenue: Number(payload.predicted_revenue ?? 0),
+    lower_bound: Number(payload.lower_bound ?? 0),
+    upper_bound: Number(payload.upper_bound ?? 0),
+    top_features: (payload.top_features ?? []).map((item) => ({
+      feature: item.feature,
+      value: Number(item.value ?? 0),
+      impact: Number(item.impact ?? 0),
+    })),
+    global_feature_importance: (payload.global_feature_importance ?? []).map((item) => ({
+      feature: item.feature,
+      mean_abs_shap: Number(item.mean_abs_shap ?? 0),
+    })),
   };
 }
 
@@ -268,6 +326,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     recommendationsResult,
     geoAnalysisResult,
     modelMetricsResult,
+    predictionExplanationResult,
   ] = await Promise.allSettled([
     getMetrics(filters),
     getDailyRevenue(filters),
@@ -282,6 +341,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     getRecommendations(filters),
     getGeoAnalysis(filters),
     getModelMetrics(),
+    getPredictionExplanation(),
   ]);
 
   if (metrics.status !== "fulfilled") {
@@ -316,6 +376,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       modelMetricsResult.status === "fulfilled"
         ? modelMetricsResult.value
         : { mae: null, rmse: null, mape: null, last_trained_at: null },
+    predictionExplanation:
+      predictionExplanationResult.status === "fulfilled"
+        ? predictionExplanationResult.value
+        : { predicted_revenue: 0, top_features: [], global_feature_importance: [] },
     predictionError:
       predictionResult.status === "rejected"
         ? "Prediction service unavailable"
@@ -332,6 +396,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       recommendationsResult.status === "rejected" ||
       geoAnalysisResult.status === "rejected"
         ? "Some BI insights are temporarily unavailable"
+        : null,
+    explanationError:
+      predictionExplanationResult.status === "rejected"
+        ? "Prediction explanation unavailable"
         : null,
   };
 }

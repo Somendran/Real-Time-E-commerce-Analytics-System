@@ -21,6 +21,7 @@ data_batches/*.csv
 current_batch.txt
 backend/models/model.pkl
 backend/models/metrics.json
+backend/models/shap_summary.json
 
 *-dev.log
 *-dev.err.log

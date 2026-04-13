@@ -49,3 +49,22 @@ def test_model_metrics_returns_valid_json(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["rmse"] == 12.0
+
+
+def test_prediction_explanation_returns_valid_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        analytics,
+        "explain_next_day_prediction",
+        lambda: {
+            "predicted_revenue": 321.0,
+            "lower_bound": 300.0,
+            "upper_bound": 350.0,
+            "top_features": [{"feature": "lag_7", "value": 250.0, "impact": 12.5}],
+            "global_feature_importance": [{"feature": "lag_7", "mean_abs_shap": 10.0}],
+        },
+    )
+
+    response = client.get("/prediction-explanation")
+
+    assert response.status_code == 200
+    assert response.json()["top_features"][0]["feature"] == "lag_7"

@@ -23,6 +23,7 @@ data_batches/batch_*.csv
 current_batch.txt
 backend/models/model.pkl
 backend/models/metrics.json
+backend/models/shap_summary.json
 
 # Full raw datasets are kept locally, not committed.
 *.csv

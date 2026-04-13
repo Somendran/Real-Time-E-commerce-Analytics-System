@@ -9,6 +9,7 @@ import InsightList from "../components/InsightList";
 import KpiCard from "../components/KpiCard";
 import LineChartCard from "../components/LineChartCard";
 import PredictionCard from "../components/PredictionCard";
+import PredictionDriversCard from "../components/PredictionDriversCard";
 import {
   type Anomaly,
   type CategoryAnalysisPoint,
@@ -22,6 +23,7 @@ import {
   type Metrics,
   type OrdersPoint,
   type Prediction,
+  type PredictionExplanation,
   type Recommendation,
   type RevenuePoint,
   type WeekdayAnalysisPoint,
@@ -43,15 +45,31 @@ type DashboardState = {
   recommendations: Recommendation[];
   geoAnalysis: GeoAnalysisPoint[];
   modelMetrics: ModelMetrics;
+  predictionExplanation: PredictionExplanation;
 };
 
 const REFRESH_INTERVAL_MS = 30000;
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DEFAULT_MODEL_METRICS: ModelMetrics = {
+  model_type: null,
+  model_version: null,
+  features: [],
   mae: null,
   rmse: null,
   mape: null,
+  baseline_mae: null,
+  baseline_rmse: null,
+  baseline_mape: null,
+  baseline_improvement_pct: null,
+  residual_std: null,
+  training_rows: null,
+  test_rows: null,
   last_trained_at: null,
+};
+const DEFAULT_PREDICTION_EXPLANATION: PredictionExplanation = {
+  predicted_revenue: 0,
+  top_features: [],
+  global_feature_importance: [],
 };
 
 function formatCurrency(value: number) {
@@ -77,6 +95,7 @@ export default function DashboardPage() {
     recommendations: [],
     geoAnalysis: [],
     modelMetrics: DEFAULT_MODEL_METRICS,
+    predictionExplanation: DEFAULT_PREDICTION_EXPLANATION,
   });
   const [filters, setFilters] = useState<DashboardFilters>({});
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
@@ -86,6 +105,7 @@ export default function DashboardPage() {
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const [anomalyError, setAnomalyError] = useState<string | null>(null);
   const [biError, setBiError] = useState<string | null>(null);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -96,12 +116,14 @@ export default function DashboardPage() {
       setPredictionError(data.predictionError);
       setAnomalyError(data.anomalyError);
       setBiError(data.biError);
+      setExplanationError(data.explanationError);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown API error";
       setError(message);
       setPredictionError("Prediction endpoint temporarily unavailable");
       setAnomalyError("Anomaly endpoint temporarily unavailable");
       setBiError("BI insights temporarily unavailable");
+      setExplanationError("Prediction explanation unavailable");
     } finally {
       setLoading(false);
     }
@@ -171,6 +193,25 @@ export default function DashboardPage() {
     [state.recommendations],
   );
 
+  const activeFilters = useMemo(() => {
+    const items: Array<{ label: string; value: string }> = [];
+
+    if (filters.startDate) items.push({ label: "From", value: filters.startDate });
+    if (filters.endDate) items.push({ label: "To", value: filters.endDate });
+    if (filters.category) {
+      items.push({ label: "Category", value: filters.category.replace(/_/g, " ") });
+    }
+    if (filters.state) items.push({ label: "State", value: filters.state });
+    if (filters.minRevenue !== undefined) {
+      items.push({ label: "Min revenue", value: formatCurrency(filters.minRevenue) });
+    }
+    if (filters.maxRevenue !== undefined) {
+      items.push({ label: "Max revenue", value: formatCurrency(filters.maxRevenue) });
+    }
+
+    return items;
+  }, [filters]);
+
   const updateFilter = (key: keyof DashboardFilters, value: string) => {
     setFilters((current) => {
       const next = { ...current };
@@ -216,23 +257,45 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Dashboard Filters</h2>
-              <p className="text-sm text-slate-600">Filter metrics, BI charts, and recommendations.</p>
+        <section className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-100 px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Controls</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">Dashboard Filters</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Narrow the dashboard by time, category, location, or transaction value.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilters({})}
+                className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Reset
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setFilters({})}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Reset Filters
-            </button>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {activeFilters.length === 0 ? (
+                <span className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
+                  Showing all available records
+                </span>
+              ) : (
+                activeFilters.map((item) => (
+                  <span
+                    key={`${item.label}-${item.value}`}
+                    className="rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800"
+                  >
+                    {item.label}: {item.value}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <label className="text-sm font-medium text-slate-700">
+          <div className="grid grid-cols-1 gap-4 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-4">
+            <label className="block text-sm font-semibold text-slate-700">
               Start Date
               <input
                 type="date"
@@ -240,11 +303,11 @@ export default function DashboardPage() {
                 min={filterOptions?.min_date || undefined}
                 max={filterOptions?.max_date || undefined}
                 onChange={(event) => updateFilter("startDate", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               />
             </label>
 
-            <label className="text-sm font-medium text-slate-700">
+            <label className="block text-sm font-semibold text-slate-700">
               End Date
               <input
                 type="date"
@@ -252,16 +315,16 @@ export default function DashboardPage() {
                 min={filterOptions?.min_date || undefined}
                 max={filterOptions?.max_date || undefined}
                 onChange={(event) => updateFilter("endDate", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               />
             </label>
 
-            <label className="text-sm font-medium text-slate-700">
+            <label className="block text-sm font-semibold text-slate-700">
               Product Category
               <select
                 value={filters.category ?? ""}
                 onChange={(event) => updateFilter("category", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               >
                 <option value="">All categories</option>
                 {filterOptions?.categories.map((category) => (
@@ -272,12 +335,12 @@ export default function DashboardPage() {
               </select>
             </label>
 
-            <label className="text-sm font-medium text-slate-700">
+            <label className="block text-sm font-semibold text-slate-700">
               Customer State
               <select
                 value={filters.state ?? ""}
                 onChange={(event) => updateFilter("state", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               >
                 <option value="">All states</option>
                 {filterOptions?.states.map((state) => (
@@ -288,7 +351,7 @@ export default function DashboardPage() {
               </select>
             </label>
 
-            <label className="text-sm font-medium text-slate-700">
+            <label className="block text-sm font-semibold text-slate-700">
               Min Revenue
               <input
                 type="number"
@@ -297,11 +360,11 @@ export default function DashboardPage() {
                 max={filterOptions?.max_revenue}
                 placeholder={filterOptions ? String(Math.floor(filterOptions.min_revenue)) : "0"}
                 onChange={(event) => updateFilter("minRevenue", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               />
             </label>
 
-            <label className="text-sm font-medium text-slate-700">
+            <label className="block text-sm font-semibold text-slate-700">
               Max Revenue
               <input
                 type="number"
@@ -310,7 +373,7 @@ export default function DashboardPage() {
                 max={filterOptions?.max_revenue}
                 placeholder={filterOptions ? String(Math.ceil(filterOptions.max_revenue)) : "0"}
                 onChange={(event) => updateFilter("maxRevenue", event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
               />
             </label>
           </div>
@@ -329,6 +392,8 @@ export default function DashboardPage() {
           />
           <PredictionCard
             value={metrics.predictedRevenue}
+            lowerBound={state.prediction?.lower_bound}
+            upperBound={state.prediction?.upper_bound}
             loading={loading}
             error={predictionError}
           />
@@ -419,7 +484,7 @@ export default function DashboardPage() {
 
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6 xl:col-span-2">
               <h2 className="text-lg font-semibold text-slate-900">Model Metrics</h2>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
                   title="MAE"
                   value={state.modelMetrics.mae === null ? "-" : formatCurrency(state.modelMetrics.mae)}
@@ -433,6 +498,37 @@ export default function DashboardPage() {
                   value={state.modelMetrics.mape === null ? "-" : `${state.modelMetrics.mape.toFixed(2)}%`}
                 />
                 <KpiCard
+                  title="Baseline Improvement"
+                  value={
+                    state.modelMetrics.baseline_improvement_pct === null ||
+                    state.modelMetrics.baseline_improvement_pct === undefined
+                      ? "-"
+                      : `${state.modelMetrics.baseline_improvement_pct.toFixed(2)}%`
+                  }
+                />
+                <KpiCard
+                  title="Training Rows"
+                  value={
+                    state.modelMetrics.training_rows === null ||
+                    state.modelMetrics.training_rows === undefined
+                      ? "-"
+                      : state.modelMetrics.training_rows.toLocaleString()
+                  }
+                />
+                <KpiCard
+                  title="Test Rows"
+                  value={
+                    state.modelMetrics.test_rows === null ||
+                    state.modelMetrics.test_rows === undefined
+                      ? "-"
+                      : state.modelMetrics.test_rows.toLocaleString()
+                  }
+                />
+                <KpiCard
+                  title="Features"
+                  value={String(state.modelMetrics.features?.length ?? 0)}
+                />
+                <KpiCard
                   title="Last Trained"
                   value={
                     state.modelMetrics.last_trained_at
@@ -442,6 +538,12 @@ export default function DashboardPage() {
                 />
               </div>
             </section>
+
+            <PredictionDriversCard
+              drivers={state.predictionExplanation.top_features}
+              globalImportance={state.predictionExplanation.global_feature_importance}
+              error={explanationError}
+            />
           </div>
         </section>
       </div>

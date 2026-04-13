@@ -3,24 +3,43 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
 import pandas as pd
+import shap
 from xgboost import XGBRegressor
 
 from backend.db import fetch_all
 
 
-FEATURE_COLUMNS = ["day_of_week", "rolling_mean_7", "lag_1"]
+FEATURE_COLUMNS = [
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "quarter",
+    "is_weekend",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_7",
+    "rolling_mean_3",
+    "rolling_mean_7",
+    "rolling_mean_14",
+    "rolling_std_7",
+    "revenue_change_1",
+]
 TARGET_COLUMN = "daily_revenue"
+MODEL_TYPE = "XGBRegressor"
 MODEL_DIR = Path(__file__).resolve().parent / "models"
 MODEL_PATH = MODEL_DIR / "model.pkl"
 METRICS_PATH = MODEL_DIR / "metrics.json"
+SHAP_SUMMARY_PATH = MODEL_DIR / "shap_summary.json"
+TOP_SHAP_FEATURES = 5
 
 
 def load_orders_data() -> pd.DataFrame:
-    """Load raw order_date and payment_value data from PostgreSQL."""
     query = """
     SELECT
         order_date,
@@ -44,17 +63,14 @@ def load_orders_data() -> pd.DataFrame:
 
 
 def build_daily_revenue_dataset(raw_df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate to daily revenue and engineer time-series features."""
     if raw_df.empty:
-        return pd.DataFrame(
-            columns=["date", "daily_revenue", "day_of_week", "rolling_mean_7", "lag_1"]
-        )
+        return pd.DataFrame(columns=["date", TARGET_COLUMN, *FEATURE_COLUMNS])
 
     grouped_daily = (
         raw_df.assign(date=raw_df["order_date"].dt.date)
         .groupby("date", as_index=False)["payment_value"]
         .sum()
-        .rename(columns={"payment_value": "daily_revenue"})
+        .rename(columns={"payment_value": TARGET_COLUMN})
     )
 
     grouped_daily["date"] = pd.to_datetime(grouped_daily["date"])
@@ -71,41 +87,50 @@ def build_daily_revenue_dataset(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
     daily = full_dates.merge(grouped_daily, on="date", how="left")
 
-    daily["daily_revenue"] = pd.to_numeric(daily["daily_revenue"], errors="coerce")
+    daily[TARGET_COLUMN] = pd.to_numeric(daily[TARGET_COLUMN], errors="coerce")
+    missing_mask = daily[TARGET_COLUMN].isna()
+    interpolated = daily[TARGET_COLUMN].interpolate(method="linear", limit_direction="both")
+    daily.loc[missing_mask, TARGET_COLUMN] = interpolated.loc[missing_mask]
+    daily[TARGET_COLUMN] = daily[TARGET_COLUMN].ffill().bfill().fillna(0.0)
 
-    missing_mask = daily["daily_revenue"].isna()
-    interpolated = daily["daily_revenue"].interpolate(method="linear", limit_direction="both")
-    daily.loc[missing_mask, "daily_revenue"] = interpolated.loc[missing_mask]
-
-    daily["daily_revenue"] = daily["daily_revenue"].ffill().bfill().fillna(0.0)
     daily["day_of_week"] = daily["date"].dt.dayofweek
-    daily["rolling_mean_7"] = daily["daily_revenue"].rolling(window=7, min_periods=1).mean()
-    daily["lag_1"] = daily["daily_revenue"].shift(1)
+    daily["day_of_month"] = daily["date"].dt.day
+    daily["month"] = daily["date"].dt.month
+    daily["quarter"] = daily["date"].dt.quarter
+    daily["is_weekend"] = daily["day_of_week"].isin([5, 6]).astype(int)
 
-    daily["lag_1"] = daily["lag_1"].fillna(0.0)
-    daily["rolling_mean_7"] = daily["rolling_mean_7"].fillna(daily["daily_revenue"])
+    for lag in [1, 2, 3, 7]:
+        daily[f"lag_{lag}"] = daily[TARGET_COLUMN].shift(lag)
+
+    daily["rolling_mean_3"] = daily[TARGET_COLUMN].rolling(window=3, min_periods=1).mean()
+    daily["rolling_mean_7"] = daily[TARGET_COLUMN].rolling(window=7, min_periods=1).mean()
+    daily["rolling_mean_14"] = daily[TARGET_COLUMN].rolling(window=14, min_periods=1).mean()
+    daily["rolling_std_7"] = (
+        daily[TARGET_COLUMN].rolling(window=7, min_periods=2).std(ddof=0).fillna(0.0)
+    )
+    daily["revenue_change_1"] = daily[TARGET_COLUMN].diff(1)
+
+    for feature in FEATURE_COLUMNS:
+        daily[feature] = pd.to_numeric(daily[feature], errors="coerce")
+
+    lag_columns = ["lag_1", "lag_2", "lag_3", "lag_7"]
+    daily[lag_columns] = daily[lag_columns].ffill().bfill().fillna(0.0)
+    daily["revenue_change_1"] = daily["revenue_change_1"].fillna(0.0)
+    daily["rolling_std_7"] = daily["rolling_std_7"].fillna(0.0)
 
     return daily
 
 
 def prepare_ml_dataframe() -> pd.DataFrame:
-    """
-    Full ML prep pipeline:
-    1) Load from DB
-    2) Aggregate daily
-    3) Generate model features
-    4) Return clean DataFrame
-    """
     raw_df = load_orders_data()
     ml_df = build_daily_revenue_dataset(raw_df)
 
     if ml_df.empty:
         return ml_df
 
-    ml_df["day_of_week"] = ml_df["day_of_week"].astype(int)
-    ml_df["daily_revenue"] = ml_df["daily_revenue"].astype(float)
-    ml_df["rolling_mean_7"] = ml_df["rolling_mean_7"].astype(float)
-    ml_df["lag_1"] = ml_df["lag_1"].astype(float)
+    ml_df[TARGET_COLUMN] = ml_df[TARGET_COLUMN].astype(float)
+    for feature in FEATURE_COLUMNS:
+        ml_df[feature] = ml_df[feature].astype(float)
 
     return ml_df
 
@@ -129,9 +154,9 @@ def _clean_training_dataframe(ml_df: pd.DataFrame) -> pd.DataFrame:
 def _new_revenue_model() -> XGBRegressor:
     return XGBRegressor(
         objective="reg:squarederror",
-        n_estimators=80,
+        n_estimators=160,
         max_depth=3,
-        learning_rate=0.08,
+        learning_rate=0.05,
         subsample=0.9,
         colsample_bytree=0.9,
         random_state=42,
@@ -140,7 +165,6 @@ def _new_revenue_model() -> XGBRegressor:
 
 
 def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
-    """Train a lightweight XGBoost regressor from engineered features."""
     training_df = _clean_training_dataframe(ml_df)
     x = training_df[FEATURE_COLUMNS].to_numpy(dtype=float)
     y = training_df[TARGET_COLUMN].to_numpy(dtype=float)
@@ -150,9 +174,36 @@ def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
     return model
 
 
-def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float]:
+def _safe_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    non_zero_mask = y_true != 0
+    if not non_zero_mask.any():
+        return 0.0
+    return float(np.mean(np.abs((y_true[non_zero_mask] - y_pred[non_zero_mask]) / y_true[non_zero_mask])) * 100)
+
+
+def _calculate_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    errors = y_true - y_pred
+    return {
+        "mae": float(np.mean(np.abs(errors))),
+        "rmse": float(np.sqrt(np.mean(np.square(errors)))),
+        "mape": _safe_mape(y_true, y_pred),
+    }
+
+
+def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float | int]:
     if len(training_df) < 5:
-        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0}
+        return {
+            "mae": 0.0,
+            "rmse": 0.0,
+            "mape": 0.0,
+            "baseline_mae": 0.0,
+            "baseline_rmse": 0.0,
+            "baseline_mape": 0.0,
+            "baseline_improvement_pct": 0.0,
+            "residual_std": 0.0,
+            "training_rows": int(len(training_df)),
+            "test_rows": 0,
+        }
 
     split_index = max(1, int(len(training_df) * 0.8))
     if split_index >= len(training_df):
@@ -167,39 +218,54 @@ def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float]:
         train_df[TARGET_COLUMN].to_numpy(dtype=float),
     )
 
+    x_test = test_df[FEATURE_COLUMNS].to_numpy(dtype=float)
     y_true = test_df[TARGET_COLUMN].to_numpy(dtype=float)
-    y_pred = model.predict(test_df[FEATURE_COLUMNS].to_numpy(dtype=float))
+    y_pred = model.predict(x_test)
+    baseline_pred = test_df["lag_1"].to_numpy(dtype=float)
 
-    errors = y_true - y_pred
-    mae = float(np.mean(np.abs(errors)))
-    rmse = float(np.sqrt(np.mean(np.square(errors))))
+    model_metrics = _calculate_regression_metrics(y_true, y_pred)
+    baseline_metrics = _calculate_regression_metrics(y_true, baseline_pred)
+    residuals = y_true - y_pred
 
-    non_zero_mask = y_true != 0
-    if non_zero_mask.any():
-        mape = float(np.mean(np.abs(errors[non_zero_mask] / y_true[non_zero_mask])) * 100)
+    baseline_mae = baseline_metrics["mae"]
+    if baseline_mae > 0:
+        improvement_pct = ((baseline_mae - model_metrics["mae"]) / baseline_mae) * 100
     else:
-        mape = 0.0
+        improvement_pct = 0.0
 
-    return {"mae": mae, "rmse": rmse, "mape": mape}
+    return {
+        **model_metrics,
+        "baseline_mae": baseline_metrics["mae"],
+        "baseline_rmse": baseline_metrics["rmse"],
+        "baseline_mape": baseline_metrics["mape"],
+        "baseline_improvement_pct": float(improvement_pct),
+        "residual_std": float(np.std(residuals, ddof=0)),
+        "training_rows": int(len(train_df)),
+        "test_rows": int(len(test_df)),
+    }
 
 
-def train_and_save_model() -> dict[str, float | str]:
-    """Train the revenue model, persist it to disk, and store evaluation metrics."""
+def train_and_save_model() -> dict[str, Any]:
     ml_df = prepare_ml_dataframe()
     training_df = _clean_training_dataframe(ml_df)
 
     model = train_revenue_model(ml_df)
     metrics = _evaluate_model(training_df)
+    shap_summary = _build_shap_summary(model, training_df[FEATURE_COLUMNS])
     last_trained_at = datetime.now(timezone.utc).isoformat()
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
 
-    payload: dict[str, float | str] = {
+    payload: dict[str, Any] = {
+        "model_type": MODEL_TYPE,
+        "model_version": last_trained_at,
+        "features": FEATURE_COLUMNS,
         **metrics,
         "last_trained_at": last_trained_at,
     }
     METRICS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    SHAP_SUMMARY_PATH.write_text(json.dumps(shap_summary, indent=2), encoding="utf-8")
 
     return payload
 
@@ -212,65 +278,157 @@ def load_model() -> XGBRegressor:
     return joblib.load(MODEL_PATH)
 
 
-def load_model_metrics() -> dict[str, float | str | None]:
+def load_model_metrics() -> dict[str, Any]:
     if not METRICS_PATH.exists():
         return {
+            "model_type": MODEL_TYPE,
+            "model_version": None,
+            "features": FEATURE_COLUMNS,
             "mae": None,
             "rmse": None,
             "mape": None,
+            "baseline_mae": None,
+            "baseline_rmse": None,
+            "baseline_mape": None,
+            "baseline_improvement_pct": None,
+            "residual_std": None,
+            "training_rows": None,
+            "test_rows": None,
             "last_trained_at": None,
         }
 
     return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
 
 
+def _extract_shap_array(shap_values: Any) -> np.ndarray:
+    values = shap_values.values if hasattr(shap_values, "values") else shap_values
+    values_array = np.asarray(values, dtype=float)
+
+    if values_array.ndim == 3:
+        values_array = values_array[:, :, 0]
+    if values_array.ndim == 1:
+        values_array = values_array.reshape(1, -1)
+
+    return values_array
+
+
+def _build_shap_summary(model: XGBRegressor, feature_df: pd.DataFrame) -> dict[str, Any]:
+    if feature_df.empty:
+        return {"feature_importance": []}
+
+    explainer = shap.Explainer(model)
+    shap_values = explainer(feature_df)
+    values_array = _extract_shap_array(shap_values)
+    mean_abs_values = np.abs(values_array).mean(axis=0)
+
+    feature_importance = sorted(
+        [
+            {"feature": feature, "mean_abs_shap": float(mean_abs_values[idx])}
+            for idx, feature in enumerate(FEATURE_COLUMNS)
+        ],
+        key=lambda item: item["mean_abs_shap"],
+        reverse=True,
+    )
+
+    return {"feature_importance": feature_importance}
+
+
+def load_shap_summary() -> dict[str, Any]:
+    if not SHAP_SUMMARY_PATH.exists():
+        return {"feature_importance": []}
+
+    return json.loads(SHAP_SUMMARY_PATH.read_text(encoding="utf-8"))
+
+
 def _build_next_day_features(ml_df: pd.DataFrame) -> pd.DataFrame:
-    """Create one-row feature frame for next-day prediction."""
     if ml_df.empty:
         raise ValueError("Cannot build prediction features from an empty dataframe.")
 
-    latest_date = pd.to_datetime(ml_df["date"]).max()
+    daily = ml_df.sort_values("date").reset_index(drop=True)
+    latest_date = pd.to_datetime(daily["date"]).max()
     next_date = latest_date + pd.Timedelta(days=1)
+    revenue = daily[TARGET_COLUMN].astype(float)
 
-    last_revenue = float(ml_df[TARGET_COLUMN].iloc[-1])
-    rolling_mean_7 = float(ml_df[TARGET_COLUMN].tail(7).mean())
+    feature_row = {
+        "day_of_week": float(next_date.dayofweek),
+        "day_of_month": float(next_date.day),
+        "month": float(next_date.month),
+        "quarter": float(next_date.quarter),
+        "is_weekend": float(1 if next_date.dayofweek in [5, 6] else 0),
+        "lag_1": float(revenue.iloc[-1]) if len(revenue) >= 1 else 0.0,
+        "lag_2": float(revenue.iloc[-2]) if len(revenue) >= 2 else float(revenue.iloc[-1]),
+        "lag_3": float(revenue.iloc[-3]) if len(revenue) >= 3 else float(revenue.iloc[-1]),
+        "lag_7": float(revenue.iloc[-7]) if len(revenue) >= 7 else float(revenue.iloc[0]),
+        "rolling_mean_3": float(revenue.tail(3).mean()),
+        "rolling_mean_7": float(revenue.tail(7).mean()),
+        "rolling_mean_14": float(revenue.tail(14).mean()),
+        "rolling_std_7": float(revenue.tail(7).std(ddof=0)) if len(revenue.tail(7)) >= 2 else 0.0,
+        "revenue_change_1": float(revenue.iloc[-1] - revenue.iloc[-2]) if len(revenue) >= 2 else 0.0,
+    }
 
-    return pd.DataFrame(
-        [
-            {
-                "day_of_week": int(next_date.dayofweek),
-                "rolling_mean_7": rolling_mean_7,
-                "lag_1": last_revenue,
-            }
-        ]
-    )
+    return pd.DataFrame([{feature: feature_row[feature] for feature in FEATURE_COLUMNS}])
+
+
+def _prediction_bounds(prediction: float) -> tuple[float, float]:
+    metrics = load_model_metrics()
+    residual_std = metrics.get("residual_std")
+    try:
+        spread = float(residual_std or 0.0)
+    except (TypeError, ValueError):
+        spread = 0.0
+
+    return max(0.0, prediction - spread), prediction + spread
 
 
 def predict_next_day() -> dict[str, float]:
-    """
-    Load the persisted model and predict next-day revenue.
-
-    Returns:
-        {"predicted_revenue": value}
-    """
     model = load_model()
     ml_df = prepare_ml_dataframe()
     next_features = _build_next_day_features(ml_df)
+    prediction_input = next_features[FEATURE_COLUMNS].to_numpy(dtype=float)
 
-    prediction = float(
-        model.predict(next_features[FEATURE_COLUMNS].to_numpy(dtype=float))[0]
-    )
+    prediction = float(model.predict(prediction_input)[0])
     prediction = max(0.0, prediction)
+    lower_bound, upper_bound = _prediction_bounds(prediction)
 
-    return {"predicted_revenue": prediction}
+    return {
+        "predicted_revenue": prediction,
+        "lower_bound": lower_bound,
+        "upper_bound": upper_bound,
+    }
+
+
+def explain_next_day_prediction(top_n: int = TOP_SHAP_FEATURES) -> dict[str, Any]:
+    model = load_model()
+    ml_df = prepare_ml_dataframe()
+    next_features = _build_next_day_features(ml_df)
+    prediction = predict_next_day()
+
+    explainer = shap.Explainer(model)
+    shap_values = explainer(next_features[FEATURE_COLUMNS])
+    values_array = _extract_shap_array(shap_values)
+    impacts = values_array[0]
+
+    top_features = sorted(
+        [
+            {
+                "feature": feature,
+                "value": float(next_features.iloc[0][feature]),
+                "impact": float(impacts[idx]),
+            }
+            for idx, feature in enumerate(FEATURE_COLUMNS)
+        ],
+        key=lambda item: abs(item["impact"]),
+        reverse=True,
+    )[:top_n]
+
+    return {
+        **prediction,
+        "top_features": top_features,
+        "global_feature_importance": load_shap_summary().get("feature_importance", []),
+    }
 
 
 def detect_anomalies(z_threshold: float = 2.5) -> list[dict[str, float | str]]:
-    """
-    Detect daily revenue anomalies using Z-score.
-
-    An anomaly is flagged when abs(z_score) > z_threshold.
-    """
     ml_df = prepare_ml_dataframe()
     if ml_df.empty:
         return []

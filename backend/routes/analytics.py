@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from backend.db import fetch_all, fetch_one
 from backend.ml import (
     detect_anomalies,
+    explain_next_day_prediction,
     load_model_metrics,
     predict_next_day,
     train_and_save_model,
@@ -407,6 +408,14 @@ def get_model_metrics():
         return load_model_metrics()
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to load model metrics") from exc
+
+
+@router.get("/prediction-explanation")
+def get_prediction_explanation():
+    try:
+        return explain_next_day_prediction()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to explain prediction") from exc
 
 
 @router.get("/anomalies", response_model=None)
