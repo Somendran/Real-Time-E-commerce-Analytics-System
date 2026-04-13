@@ -166,7 +166,8 @@ The Next.js dashboard includes:
 - customer segmentation pie chart
 - weekday revenue chart
 - geographic revenue chart
-- model metrics section
+- ML model metrics and feature importance (SHAP)
+- prediction range and driver analysis
 - anomaly alerts
 - key insights
 - recommendations
@@ -174,29 +175,34 @@ The Next.js dashboard includes:
 
 ### Machine Learning
 
-The ML layer predicts next-day revenue using daily revenue features:
+The ML layer predicts next-day revenue using temporal and rolling features:
 
-- `day_of_week`
-- `rolling_mean_7`
-- `lag_1`
+- time-based features (`day_of_week`, `day_of_month`, `month`, `quarter`, `is_weekend`)
+- lag features (`lag_1`, `lag_2`, `lag_3`, `lag_7`)
+- rolling statistics (`rolling_mean_3`, `rolling_mean_7`, `rolling_mean_14`, `rolling_std_7`)
+- momentum (`revenue_change_1`)
 
 Model lifecycle:
 
 ```text
 train_and_save_model()
+  -> uses time-based train/test splits
   -> trains XGBoost model
-  -> evaluates MAE, RMSE, MAPE
+  -> evaluates against naive baselines (MAE, RMSE, MAPE)
+  -> calculates SHAP global feature importance
   -> saves backend/models/model.pkl
   -> saves backend/models/metrics.json
+  -> saves backend/models/shap_summary.json
 ```
 
-`/prediction` loads the saved model from disk. It does not retrain on every request.
+`/prediction` and `/prediction-explanation` endpoints load the saved model from disk. They do not retrain on every request.
 
 Model artifacts are local runtime files and are ignored by git:
 
 ```text
 backend/models/model.pkl
 backend/models/metrics.json
+backend/models/shap_summary.json
 ```
 
 ## API Endpoints
@@ -226,6 +232,7 @@ ML endpoints:
 
 ```text
 GET  /prediction
+GET  /prediction-explanation
 GET  /anomalies
 GET  /model-metrics
 POST /train-model
