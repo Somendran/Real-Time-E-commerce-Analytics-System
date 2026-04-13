@@ -10,10 +10,12 @@ type AnomalyAlertProps = {
   error?: string | null;
 };
 
-function formatRm(value: number): string {
-  return `RM ${new Intl.NumberFormat("en-MY", {
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
     maximumFractionDigits: 0,
-  }).format(value)}`;
+  }).format(value);
 }
 
 export default function AnomalyAlert({ anomalies, loading = false, error = null }: AnomalyAlertProps) {
@@ -44,7 +46,7 @@ export default function AnomalyAlert({ anomalies, loading = false, error = null 
               >
                 <span className="font-semibold">⚠️ Unusual spike detected on {item.date}</span>
                 <span className="ml-2 text-rose-800">
-                  ({formatRm(item.revenue)}, z={item.z_score.toFixed(2)})
+                  ({formatCurrency(item.revenue)}, z={item.z_score.toFixed(2)})
                 </span>
               </li>
             ))}

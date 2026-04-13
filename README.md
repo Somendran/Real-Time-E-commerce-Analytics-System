@@ -1,153 +1,300 @@
 # Real-Time E-commerce Analytics System
 
-## Project Overview
-This project is an end-to-end analytics platform built on the Olist e-commerce dataset.
-It simulates real-time data ingestion using incremental batches, stores processed data in a cloud PostgreSQL database (Supabase), serves analytics through a FastAPI backend, and presents business insights in a modern Next.js dashboard.
+End-to-end data engineering, BI, and ML analytics system built on the Olist Brazilian e-commerce dataset.
 
-The system demonstrates production-style engineering across data, API, frontend, and ML:
-- Incremental batch ingestion and tracking
-- Cloud database integration with upsert loading
-- API-first analytics delivery
-- Interactive dashboard for operational insights
-- Revenue prediction and anomaly detection
+The project simulates real-time ingestion with incremental batches, stores cleaned data in Supabase PostgreSQL, serves analytics through FastAPI, and presents operational BI insights in a Next.js dashboard.
+
+Dataset source: [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+
+## What This Project Does
+
+- Ingests and cleans raw Olist CSV files
+- Splits clean data into incremental batch files
+- Loads one batch per run into PostgreSQL with conflict-safe upserts
+- Serves KPI, trend, BI, ML, anomaly, and geo-analysis endpoints through FastAPI
+- Displays KPIs, charts, filters, recommendations, anomaly alerts, and model metrics in a Next.js dashboard
+- Persists an XGBoost revenue prediction model to disk instead of retraining on every request
+- Includes pytest coverage and GitHub Actions CI
 
 ## Architecture
-Data flow:
 
-Airflow-style Batch Simulation -> Supabase PostgreSQL -> FastAPI -> Next.js Dashboard -> Machine Learning Insights
+```text
+Olist CSV files
+  -> Pandas cleaning pipeline
+  -> Incremental batch files
+  -> Supabase PostgreSQL orders_clean
+  -> FastAPI analytics and ML API
+  -> Next.js BI dashboard
+```
 
-### Components
-- Ingestion layer: prepares and cleans source data, then creates batch files
-- Storage layer: loads clean records into Supabase PostgreSQL
-- API layer: exposes metrics, trends, prediction, and anomalies
-- UI layer: renders KPIs, charts, prediction card, and anomaly alerts
-- ML layer: trains on daily revenue features and detects anomalies
+## Project Structure
+
+```text
+backend/
+  app.py
+  db.py
+  ml.py
+  models/
+  routes/
+frontend/
+  app/
+  components/
+  lib/
+pipeline/
+  prepare_data.py
+  batch_creator.py
+  loader.py
+  tracker.py
+  validation.py
+dags/
+  streaming_dag.py
+data/
+  raw/
+infra/
+  sql/001_create_orders_clean.sql
+tests/
+.github/workflows/ci.yml
+run_pipeline.py
+```
+
+## Data
+
+The full raw Olist dataset is not committed because the files are large.
+
+Download the dataset from Kaggle:
+
+```text
+https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+```
+
+Place these files in `data/raw/`:
+
+```text
+olist_orders_dataset.csv
+olist_order_items_dataset.csv
+olist_order_payments_dataset.csv
+olist_order_reviews_dataset.csv
+olist_products_dataset.csv
+olist_customers_dataset.csv
+product_category_name_translation.csv
+```
+
+The pipeline reads from `data/raw/` first and only falls back to project-root CSVs for legacy local setups.
 
 ## Features
-- Incremental data ingestion pipeline with batch pointer tracking
-- Supabase PostgreSQL integration with conflict-safe upserts
-- FastAPI analytics endpoints
-- Next.js dashboard with responsive KPI cards and trend charts
-- Next-day revenue prediction endpoint
-- Anomaly detection endpoint using Z-score
 
-## Tech Stack
-- Backend: Python, FastAPI
-- Database: PostgreSQL (Supabase)
-- Frontend: Next.js, TypeScript, Tailwind CSS, Recharts
-- Data Processing: Pandas
-- ML: XGBoost, NumPy
-- DB Driver: psycopg2
-- Config: python-dotenv
+### Data Pipeline
 
-## How It Works
-1. Data preparation
-- Source Olist CSVs are joined into a unified clean dataset.
-- Data quality steps include type conversion, null handling, deduplication, and sorting.
+- Raw CSV loading
+- Data cleaning and type conversion
+- Null handling
+- Deduplication
+- Ordered batch creation
+- Batch pointer tracking with `current_batch.txt`
+- PostgreSQL upsert loading
+- Validation checks for clean data, batches, and database inserts
 
-2. Batch simulation
-- Clean data is split into ordered batch files.
-- A state file tracks the current batch index.
+### Analytics API
 
-3. Incremental loading
-- Each run processes one batch.
-- Rows are upserted into PostgreSQL to prevent duplicate primary-key inserts.
+FastAPI serves:
 
-4. API analytics
-- FastAPI executes aggregate SQL queries for:
-  - total orders
-  - total revenue
-  - daily revenue
-  - daily orders
-  - cumulative data growth
+- total orders
+- total revenue
+- daily revenue
+- daily orders
+- cumulative data growth
+- category revenue analysis
+- customer segmentation
+- weekday revenue analysis
+- geographic revenue analysis by state
+- rule-based insights
+- business recommendations
+- anomaly detection
+- next-day revenue prediction
+- model evaluation metrics
 
-5. ML outputs
-- Daily revenue series is feature-engineered and used for next-day forecasting.
-- Z-score detection flags unusual revenue spikes.
+### BI Dashboard
 
-6. Dashboard rendering
-- Frontend fetches API endpoints and auto-refreshes periodically.
-- Users see KPIs, trend charts, prediction, and anomaly alerts.
+The Next.js dashboard includes:
 
-## Machine Learning
-### Features
-- day_of_week
-- rolling_mean_7
-- lag_1
+- KPI cards
+- daily revenue chart
+- daily orders chart
+- cumulative data growth chart
+- category analysis chart
+- customer segmentation pie chart
+- weekday revenue chart
+- geographic revenue chart
+- model metrics section
+- anomaly alerts
+- key insights
+- recommendations
+- filters for date range, product category, customer state, and revenue range
 
-### Prediction Method
-- Model: XGBoost Regressor
-- Target: daily_revenue
-- Output: predicted_revenue
+### Machine Learning
 
-### Anomaly Detection
-- Method: Z-score over daily_revenue
-- Rule: abs(z_score) > 2.5
-- Output: list of anomalies with date, revenue, z_score
+The ML layer predicts next-day revenue using daily revenue features:
+
+- `day_of_week`
+- `rolling_mean_7`
+- `lag_1`
+
+Model lifecycle:
+
+```text
+train_and_save_model()
+  -> trains XGBoost model
+  -> evaluates MAE, RMSE, MAPE
+  -> saves backend/models/model.pkl
+  -> saves backend/models/metrics.json
+```
+
+`/prediction` loads the saved model from disk. It does not retrain on every request.
+
+Model artifacts are local runtime files and are ignored by git:
+
+```text
+backend/models/model.pkl
+backend/models/metrics.json
+```
 
 ## API Endpoints
-- GET /metrics
-- GET /daily-revenue
-- GET /daily-orders
-- GET /data-growth
-- GET /prediction
-- GET /anomalies
+
+Core analytics:
+
+```text
+GET /metrics
+GET /daily-revenue
+GET /daily-orders
+GET /data-growth
+```
+
+BI endpoints:
+
+```text
+GET /category-analysis
+GET /customer-segmentation
+GET /weekday-analysis
+GET /geo-analysis
+GET /insights
+GET /recommendations
+GET /filter-options
+```
+
+ML endpoints:
+
+```text
+GET  /prediction
+GET  /anomalies
+GET  /model-metrics
+POST /train-model
+```
+
+Filterable endpoints support:
+
+```text
+?start_date=YYYY-MM-DD
+&end_date=YYYY-MM-DD
+&category=category_name
+&state=SP
+&min_revenue=0
+&max_revenue=500
+```
+
+Example:
+
+```text
+GET /metrics?state=SP&category=furniture_decor
+```
+
+## Database Schema
+
+The schema is stored in:
+
+```text
+infra/sql/001_create_orders_clean.sql
+```
+
+The pipeline uses this SQL file when creating the `orders_clean` table.
 
 ## How to Run
+
 ### 1. Prerequisites
+
 - Python 3.10+
 - Node.js 18+
 - npm
-- Supabase/PostgreSQL connection string
+- Supabase or PostgreSQL connection string
+- Olist CSV files in `data/raw/`
 
-### 2. Python environment and dependencies
+### 2. Python Environment
+
 From the project root:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### 3. Configure environment variables
-Create or update .env in the project root:
+### 3. Environment Variables
+
+Create or update `.env` in the project root:
 
 ```env
 SUPABASE_DB_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
 ```
 
-Create frontend/.env.local:
+Create or update `frontend/.env.local`:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-### 4. Run data pipeline
-Real load (writes to DB):
+### 4. Run the Pipeline
+
+Dry run, no database writes:
 
 ```powershell
-python run_pipeline.py false
+.\.venv\Scripts\python.exe run_pipeline.py
 ```
 
-Dry run (no DB writes):
+Real load, writes the next batch to PostgreSQL and trains the saved ML model:
 
 ```powershell
-python run_pipeline.py
+.\.venv\Scripts\python.exe run_pipeline.py false
 ```
 
-### 5. Run backend
-From project root:
+Manual model training:
 
 ```powershell
-uvicorn backend.app:app --reload
+.\.venv\Scripts\python.exe -c "from backend.ml import train_and_save_model; print(train_and_save_model())"
+```
+
+### 5. Run the Backend
+
+Use the venv Python module form so PowerShell does not accidentally pick a global `uvicorn` install:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.app:app --reload
 ```
 
 Backend URL:
-- http://127.0.0.1:8000
 
-### 6. Run frontend
-In a new terminal:
+```text
+http://127.0.0.1:8000
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+### 6. Run the Frontend
+
+In a second terminal:
 
 ```powershell
 cd frontend
@@ -156,15 +303,84 @@ npm run dev
 ```
 
 Frontend URL:
-- http://localhost:3000
+
+```text
+http://localhost:3000
+```
+
+## Testing
+
+Run Python tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Current test coverage includes:
+
+- batch creation
+- batch pointer tracking
+- ML feature engineering
+- persisted prediction behavior
+- `/metrics`
+- `/prediction`
+- `/model-metrics`
+
+Run frontend production build:
+
+```powershell
+cd frontend
+npm run build
+```
+
+## CI
+
+GitHub Actions workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+The workflow:
+
+- checks out the repo
+- sets up Python
+- installs `requirements.txt`
+- runs `pytest`
+
+## Business Questions Answered
+
+- How much revenue has the platform processed?
+- Which product categories generate the most revenue?
+- Which customer segments contribute the most volume?
+- Which weekdays perform best?
+- Which customer states generate the most revenue?
+- Is revenue trending up or down?
+- Are there unusual revenue spikes?
+- What actions should the business take next?
+- What is the next-day revenue forecast?
+- How accurate is the current model?
+
+## Known Limitations
+
+- Streaming is simulated through batch files, not Kafka or Kinesis.
+- The saved ML model is local to the backend runtime and is not versioned.
+- No authentication or role-based access is implemented yet.
+- Database migrations use a SQL file, not Alembic.
+- CI currently runs backend tests only; frontend build can be added to CI next.
+- Full local reproduction requires downloading the Olist CSV files from Kaggle.
 
 ## Future Improvements
-- Replace simulated batching with true streaming (Kafka/Kinesis)
-- Add model evaluation tracking and versioning
-- Improve forecasting with richer temporal features
-- Add real-time alerting (email/Slack/webhook)
+
+- Add Docker Compose for one-command local startup
+- Add frontend build to GitHub Actions CI
+- Add dashboard screenshots and architecture diagram
+- Add model versioning and model registry metadata
+- Add Alembic migrations
 - Add authentication and role-based access
-- Add CI/CD, tests, and containerized deployment
+- Replace simulated batching with Kafka, Redpanda, Kinesis, or Pub/Sub
+- Add alert delivery through email, Slack, or webhooks
 
 ## License
-For portfolio/demo use. Add a formal license if publishing publicly.
+
+For portfolio and demo use. Add a formal license before publishing or distributing.

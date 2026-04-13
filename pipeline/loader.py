@@ -8,8 +8,12 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-from config import BATCH_DIR, DB_URL
+from config import BASE_DIR, BATCH_DIR, DB_URL
+from backend.ml import train_and_save_model
 from pipeline.tracker import get_current_batch, update_current_batch
+
+
+SCHEMA_PATH = BASE_DIR / "infra" / "sql" / "001_create_orders_clean.sql"
 
 
 def _validate_db_url() -> str:
@@ -28,22 +32,7 @@ def get_connection():
 
 
 def create_orders_table() -> None:
-    create_sql = """
-    CREATE TABLE IF NOT EXISTS orders_clean (
-        order_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        product_id TEXT NOT NULL,
-        order_date TIMESTAMP NOT NULL,
-        price NUMERIC(12,2) NOT NULL,
-        freight_value NUMERIC(12,2) NOT NULL,
-        payment_value NUMERIC(12,2) NOT NULL,
-        review_score INTEGER NOT NULL,
-        product_category_name TEXT NOT NULL,
-        customer_city TEXT NOT NULL,
-        customer_state TEXT NOT NULL,
-        PRIMARY KEY (order_id, product_id, order_date)
-    );
-    """
+    create_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     try:
         with get_connection() as conn:
             with conn.cursor() as cursor:
@@ -172,6 +161,7 @@ def run_pipeline(batch_dir: Path = BATCH_DIR) -> str:
 
     inserted = load_batch(batch_idx=batch_idx, batch_dir=batch_dir, dry_run=False)
     update_current_batch(batch_idx + 1)
+    train_and_save_model()
 
     return f"Processed batch_{batch_idx}.csv ({inserted} rows upserted)."
 

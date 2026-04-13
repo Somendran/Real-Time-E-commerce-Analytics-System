@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 
 from config import DB_URL
+from backend.ml import train_and_save_model
 from pipeline.batch_creator import create_batches
 from pipeline.loader import load_batch
 from pipeline.prepare_data import prepare_orders_dataset
@@ -46,6 +47,10 @@ def run_local_pipeline(dry_run: bool = True, batch_size: int = 1000, batch_mode:
             validate_database_insert(DB_URL)
         else:
             print("Skipping database validation because DB URL is not set.")
+
+        print("Training and saving ML model...")
+        train_and_save_model()
+        print("Model training completed")
 
     except FileNotFoundError as exc:
         print(f"File not found error: {exc}")

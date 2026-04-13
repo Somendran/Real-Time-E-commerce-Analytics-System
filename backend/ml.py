@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
@@ -9,6 +14,9 @@ from backend.db import fetch_all
 
 FEATURE_COLUMNS = ["day_of_week", "rolling_mean_7", "lag_1"]
 TARGET_COLUMN = "daily_revenue"
+MODEL_DIR = Path(__file__).resolve().parent / "models"
+MODEL_PATH = MODEL_DIR / "model.pkl"
+METRICS_PATH = MODEL_DIR / "metrics.json"
 
 
 def load_orders_data() -> pd.DataFrame:
@@ -29,7 +37,6 @@ def load_orders_data() -> pd.DataFrame:
     df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
     df["payment_value"] = pd.to_numeric(df["payment_value"], errors="coerce")
 
-    # Drop invalid dates, fill missing revenue with 0.
     df = df.dropna(subset=["order_date"])
     df["payment_value"] = df["payment_value"].fillna(0.0)
 
@@ -53,7 +60,6 @@ def build_daily_revenue_dataset(raw_df: pd.DataFrame) -> pd.DataFrame:
     grouped_daily["date"] = pd.to_datetime(grouped_daily["date"])
     grouped_daily = grouped_daily.sort_values("date").reset_index(drop=True)
 
-    # Build continuous calendar and merge daily aggregates into it.
     full_dates = pd.DataFrame(
         {
             "date": pd.date_range(
@@ -67,22 +73,15 @@ def build_daily_revenue_dataset(raw_df: pd.DataFrame) -> pd.DataFrame:
 
     daily["daily_revenue"] = pd.to_numeric(daily["daily_revenue"], errors="coerce")
 
-    # Interpolate only missing days; keep observed values (including true zeros) untouched.
     missing_mask = daily["daily_revenue"].isna()
     interpolated = daily["daily_revenue"].interpolate(method="linear", limit_direction="both")
     daily.loc[missing_mask, "daily_revenue"] = interpolated.loc[missing_mask]
 
-    # Fill any remaining gaps at boundaries with nearest known value.
-    daily["daily_revenue"] = daily["daily_revenue"].ffill().bfill()
-
-    # Fallback only for degenerate case where all values were missing.
-    daily["daily_revenue"] = daily["daily_revenue"].fillna(0.0)
-
+    daily["daily_revenue"] = daily["daily_revenue"].ffill().bfill().fillna(0.0)
     daily["day_of_week"] = daily["date"].dt.dayofweek
     daily["rolling_mean_7"] = daily["daily_revenue"].rolling(window=7, min_periods=1).mean()
     daily["lag_1"] = daily["daily_revenue"].shift(1)
 
-    # Handle engineered-feature nulls at series start.
     daily["lag_1"] = daily["lag_1"].fillna(0.0)
     daily["rolling_mean_7"] = daily["rolling_mean_7"].fillna(daily["daily_revenue"])
 
@@ -103,7 +102,6 @@ def prepare_ml_dataframe() -> pd.DataFrame:
     if ml_df.empty:
         return ml_df
 
-    # Enforce stable dtypes for downstream ML libraries.
     ml_df["day_of_week"] = ml_df["day_of_week"].astype(int)
     ml_df["daily_revenue"] = ml_df["daily_revenue"].astype(float)
     ml_df["rolling_mean_7"] = ml_df["rolling_mean_7"].astype(float)
@@ -112,8 +110,7 @@ def prepare_ml_dataframe() -> pd.DataFrame:
     return ml_df
 
 
-def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
-    """Train a fast XGBoost regressor from engineered features."""
+def _clean_training_dataframe(ml_df: pd.DataFrame) -> pd.DataFrame:
     if ml_df.empty:
         raise ValueError("Cannot train model: ML dataframe is empty.")
 
@@ -126,11 +123,11 @@ def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
     if training_df.empty:
         raise ValueError("Cannot train model: no valid rows after cleaning.")
 
-    x = training_df[FEATURE_COLUMNS].to_numpy(dtype=float)
-    y = training_df[TARGET_COLUMN].to_numpy(dtype=float)
+    return training_df
 
-    # Keep the model lightweight for quick retraining during API calls.
-    model = XGBRegressor(
+
+def _new_revenue_model() -> XGBRegressor:
+    return XGBRegressor(
         objective="reg:squarederror",
         n_estimators=80,
         max_depth=3,
@@ -140,8 +137,91 @@ def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
         random_state=42,
         n_jobs=1,
     )
+
+
+def train_revenue_model(ml_df: pd.DataFrame) -> XGBRegressor:
+    """Train a lightweight XGBoost regressor from engineered features."""
+    training_df = _clean_training_dataframe(ml_df)
+    x = training_df[FEATURE_COLUMNS].to_numpy(dtype=float)
+    y = training_df[TARGET_COLUMN].to_numpy(dtype=float)
+
+    model = _new_revenue_model()
     model.fit(x, y)
     return model
+
+
+def _evaluate_model(training_df: pd.DataFrame) -> dict[str, float]:
+    if len(training_df) < 5:
+        return {"mae": 0.0, "rmse": 0.0, "mape": 0.0}
+
+    split_index = max(1, int(len(training_df) * 0.8))
+    if split_index >= len(training_df):
+        split_index = len(training_df) - 1
+
+    train_df = training_df.iloc[:split_index]
+    test_df = training_df.iloc[split_index:]
+
+    model = _new_revenue_model()
+    model.fit(
+        train_df[FEATURE_COLUMNS].to_numpy(dtype=float),
+        train_df[TARGET_COLUMN].to_numpy(dtype=float),
+    )
+
+    y_true = test_df[TARGET_COLUMN].to_numpy(dtype=float)
+    y_pred = model.predict(test_df[FEATURE_COLUMNS].to_numpy(dtype=float))
+
+    errors = y_true - y_pred
+    mae = float(np.mean(np.abs(errors)))
+    rmse = float(np.sqrt(np.mean(np.square(errors))))
+
+    non_zero_mask = y_true != 0
+    if non_zero_mask.any():
+        mape = float(np.mean(np.abs(errors[non_zero_mask] / y_true[non_zero_mask])) * 100)
+    else:
+        mape = 0.0
+
+    return {"mae": mae, "rmse": rmse, "mape": mape}
+
+
+def train_and_save_model() -> dict[str, float | str]:
+    """Train the revenue model, persist it to disk, and store evaluation metrics."""
+    ml_df = prepare_ml_dataframe()
+    training_df = _clean_training_dataframe(ml_df)
+
+    model = train_revenue_model(ml_df)
+    metrics = _evaluate_model(training_df)
+    last_trained_at = datetime.now(timezone.utc).isoformat()
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, MODEL_PATH)
+
+    payload: dict[str, float | str] = {
+        **metrics,
+        "last_trained_at": last_trained_at,
+    }
+    METRICS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    return payload
+
+
+def load_model() -> XGBRegressor:
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            "Saved model not found. Run train_and_save_model() or POST /train-model first."
+        )
+    return joblib.load(MODEL_PATH)
+
+
+def load_model_metrics() -> dict[str, float | str | None]:
+    if not METRICS_PATH.exists():
+        return {
+            "mae": None,
+            "rmse": None,
+            "mape": None,
+            "last_trained_at": None,
+        }
+
+    return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
 
 
 def _build_next_day_features(ml_df: pd.DataFrame) -> pd.DataFrame:
@@ -168,20 +248,18 @@ def _build_next_day_features(ml_df: pd.DataFrame) -> pd.DataFrame:
 
 def predict_next_day() -> dict[str, float]:
     """
-    Train a regression model and predict next-day revenue.
+    Load the persisted model and predict next-day revenue.
 
     Returns:
         {"predicted_revenue": value}
     """
+    model = load_model()
     ml_df = prepare_ml_dataframe()
-    model = train_revenue_model(ml_df)
     next_features = _build_next_day_features(ml_df)
 
     prediction = float(
         model.predict(next_features[FEATURE_COLUMNS].to_numpy(dtype=float))[0]
     )
-
-    # Keep the prediction non-negative for revenue semantics.
     prediction = max(0.0, prediction)
 
     return {"predicted_revenue": prediction}
@@ -192,12 +270,6 @@ def detect_anomalies(z_threshold: float = 2.5) -> list[dict[str, float | str]]:
     Detect daily revenue anomalies using Z-score.
 
     An anomaly is flagged when abs(z_score) > z_threshold.
-
-    Returns:
-        [
-            {"date": "YYYY-MM-DD", "revenue": value, "z_score": value},
-            ...
-        ]
     """
     ml_df = prepare_ml_dataframe()
     if ml_df.empty:
@@ -207,7 +279,6 @@ def detect_anomalies(z_threshold: float = 2.5) -> list[dict[str, float | str]]:
     mean_revenue = float(revenue.mean())
     std_revenue = float(revenue.std(ddof=0))
 
-    # If standard deviation is zero, all values are identical; no anomalies.
     if std_revenue == 0.0:
         return []
 
@@ -232,5 +303,6 @@ if __name__ == "__main__":
     dataset = prepare_ml_dataframe()
     print(dataset.head(10))
     print(f"Rows prepared for ML: {len(dataset)}")
+    print(train_and_save_model())
     print(predict_next_day())
     print(detect_anomalies())

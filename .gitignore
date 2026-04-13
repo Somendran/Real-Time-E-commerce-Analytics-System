@@ -14,11 +14,20 @@ __pycache__/
 # Airflow local artifacts
 airflow.db
 logs/
+*-dev.log
+*-dev.err.log
 
 # Generated pipeline outputs/state
 data/orders_clean.csv
 data_batches/batch_*.csv
 current_batch.txt
+backend/models/model.pkl
+backend/models/metrics.json
+
+# Full raw datasets are kept locally, not committed.
+*.csv
+!data/sample/*.csv
+!tests/fixtures/*.csv
 
 # Frontend artifacts
 node_modules/

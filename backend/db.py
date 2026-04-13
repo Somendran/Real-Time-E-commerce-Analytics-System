@@ -12,25 +12,36 @@ from psycopg2.pool import ThreadedConnectionPool
 load_dotenv()
 
 DB_URL = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
-if not DB_URL:
-    raise EnvironmentError("Set SUPABASE_DB_URL or DATABASE_URL environment variable.")
+_pool: ThreadedConnectionPool | None = None
 
-# Supabase PostgreSQL requires SSL.
-_pool = ThreadedConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dsn=DB_URL,
-    sslmode="require",
-)
+
+def _get_pool() -> ThreadedConnectionPool:
+    global _pool
+
+    if _pool is not None:
+        return _pool
+
+    if not DB_URL:
+        raise EnvironmentError("Set SUPABASE_DB_URL or DATABASE_URL environment variable.")
+
+    # Supabase PostgreSQL requires SSL.
+    _pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        dsn=DB_URL,
+        sslmode="require",
+    )
+    return _pool
 
 
 @contextmanager
 def get_connection() -> Iterator[psycopg2.extensions.connection]:
-    conn = _pool.getconn()
+    pool = _get_pool()
+    conn = pool.getconn()
     try:
         yield conn
     finally:
-        _pool.putconn(conn)
+        pool.putconn(conn)
 
 
 def fetch_one(query: str, params: tuple[Any, ...] | None = None) -> dict[str, Any]:

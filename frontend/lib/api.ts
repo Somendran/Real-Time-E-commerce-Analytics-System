@@ -22,10 +22,63 @@ export type Prediction = {
   predicted_revenue: number;
 };
 
+export type ModelMetrics = {
+  mae: number | null;
+  rmse: number | null;
+  mape: number | null;
+  last_trained_at: string | null;
+};
+
 export type Anomaly = {
   date: string;
   revenue: number;
   z_score: number;
+};
+
+export type CategoryAnalysisPoint = {
+  category: string;
+  revenue: number;
+};
+
+export type CustomerSegmentPoint = {
+  segment: "High" | "Medium" | "Low" | string;
+  count: number;
+};
+
+export type WeekdayAnalysisPoint = {
+  day: number;
+  avg_revenue: number;
+};
+
+export type Insight = {
+  insight: string;
+};
+
+export type Recommendation = {
+  recommendation: string;
+};
+
+export type GeoAnalysisPoint = {
+  state: string;
+  revenue: number;
+};
+
+export type DashboardFilters = {
+  startDate?: string;
+  endDate?: string;
+  category?: string;
+  state?: string;
+  minRevenue?: number;
+  maxRevenue?: number;
+};
+
+export type FilterOptions = {
+  min_date: string;
+  max_date: string;
+  min_revenue: number;
+  max_revenue: number;
+  categories: string[];
+  states: string[];
 };
 
 const API_BASE_URL =
@@ -48,10 +101,24 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function getMetrics(): Promise<Metrics> {
+function buildQuery(filters: DashboardFilters = {}): string {
+  const params = new URLSearchParams();
+
+  if (filters.startDate) params.set("start_date", filters.startDate);
+  if (filters.endDate) params.set("end_date", filters.endDate);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.state) params.set("state", filters.state);
+  if (filters.minRevenue !== undefined) params.set("min_revenue", String(filters.minRevenue));
+  if (filters.maxRevenue !== undefined) params.set("max_revenue", String(filters.maxRevenue));
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function getMetrics(filters: DashboardFilters = {}): Promise<Metrics> {
   const payload = await fetchJson<{
     data: { total_orders: number; total_revenue: number };
-  }>("/metrics");
+  }>(`/metrics${buildQuery(filters)}`);
 
   return {
     total_orders: Number(payload.data.total_orders ?? 0),
@@ -59,10 +126,10 @@ export async function getMetrics(): Promise<Metrics> {
   };
 }
 
-export async function getDailyRevenue(): Promise<RevenuePoint[]> {
+export async function getDailyRevenue(filters: DashboardFilters = {}): Promise<RevenuePoint[]> {
   const payload = await fetchJson<{
     data: Array<{ date: string; total_revenue?: number; revenue?: number }>;
-  }>("/daily-revenue");
+  }>(`/daily-revenue${buildQuery(filters)}`);
 
   return payload.data.map((row) => ({
     date: row.date,
@@ -70,10 +137,10 @@ export async function getDailyRevenue(): Promise<RevenuePoint[]> {
   }));
 }
 
-export async function getDailyOrders(): Promise<OrdersPoint[]> {
+export async function getDailyOrders(filters: DashboardFilters = {}): Promise<OrdersPoint[]> {
   const payload = await fetchJson<{
     data: Array<{ date: string; order_count?: number; count?: number }>;
-  }>("/daily-orders");
+  }>(`/daily-orders${buildQuery(filters)}`);
 
   return payload.data.map((row) => ({
     date: row.date,
@@ -81,10 +148,10 @@ export async function getDailyOrders(): Promise<OrdersPoint[]> {
   }));
 }
 
-export async function getDataGrowth(): Promise<GrowthPoint[]> {
+export async function getDataGrowth(filters: DashboardFilters = {}): Promise<GrowthPoint[]> {
   const payload = await fetchJson<{
     data: Array<{ date: string; cumulative_orders?: number; total_rows?: number }>;
-  }>("/data-growth");
+  }>(`/data-growth${buildQuery(filters)}`);
 
   return payload.data.map((row) => ({
     date: row.date,
@@ -118,14 +185,103 @@ export async function getAnomalies(): Promise<Anomaly[]> {
   }));
 }
 
-export async function getDashboardData() {
-  const [metrics, dailyRevenue, dailyOrders, dataGrowth, predictionResult, anomaliesResult] = await Promise.allSettled([
-    getMetrics(),
-    getDailyRevenue(),
-    getDailyOrders(),
-    getDataGrowth(),
+export async function getModelMetrics(): Promise<ModelMetrics> {
+  return fetchJson<ModelMetrics>("/model-metrics");
+}
+
+export async function getCategoryAnalysis(filters: DashboardFilters = {}): Promise<CategoryAnalysisPoint[]> {
+  const payload = await fetchJson<Array<{ category: string; revenue: number }>>(
+    `/category-analysis${buildQuery(filters)}`,
+  );
+
+  return payload.map((row) => ({
+    category: row.category,
+    revenue: Number(row.revenue ?? 0),
+  }));
+}
+
+export async function getCustomerSegmentation(filters: DashboardFilters = {}): Promise<CustomerSegmentPoint[]> {
+  const payload = await fetchJson<Array<{ segment: string; count: number }>>(
+    `/customer-segmentation${buildQuery(filters)}`,
+  );
+
+  return payload.map((row) => ({
+    segment: row.segment,
+    count: Number(row.count ?? 0),
+  }));
+}
+
+export async function getWeekdayAnalysis(filters: DashboardFilters = {}): Promise<WeekdayAnalysisPoint[]> {
+  const payload = await fetchJson<Array<{ day: number; avg_revenue: number }>>(
+    `/weekday-analysis${buildQuery(filters)}`,
+  );
+
+  return payload.map((row) => ({
+    day: Number(row.day),
+    avg_revenue: Number(row.avg_revenue ?? 0),
+  }));
+}
+
+export async function getInsights(filters: DashboardFilters = {}): Promise<Insight[]> {
+  return fetchJson<Insight[]>(`/insights${buildQuery(filters)}`);
+}
+
+export async function getRecommendations(filters: DashboardFilters = {}): Promise<Recommendation[]> {
+  return fetchJson<Recommendation[]>(`/recommendations${buildQuery(filters)}`);
+}
+
+export async function getGeoAnalysis(filters: DashboardFilters = {}): Promise<GeoAnalysisPoint[]> {
+  const payload = await fetchJson<Array<{ state: string; revenue: number }>>(
+    `/geo-analysis${buildQuery(filters)}`,
+  );
+
+  return payload.map((row) => ({
+    state: row.state,
+    revenue: Number(row.revenue ?? 0),
+  }));
+}
+
+export async function getFilterOptions(): Promise<FilterOptions> {
+  const payload = await fetchJson<FilterOptions>("/filter-options");
+
+  return {
+    ...payload,
+    min_revenue: Number(payload.min_revenue ?? 0),
+    max_revenue: Number(payload.max_revenue ?? 0),
+    categories: payload.categories ?? [],
+    states: payload.states ?? [],
+  };
+}
+
+export async function getDashboardData(filters: DashboardFilters = {}) {
+  const [
+    metrics,
+    dailyRevenue,
+    dailyOrders,
+    dataGrowth,
+    predictionResult,
+    anomaliesResult,
+    categoryAnalysisResult,
+    customerSegmentationResult,
+    weekdayAnalysisResult,
+    insightsResult,
+    recommendationsResult,
+    geoAnalysisResult,
+    modelMetricsResult,
+  ] = await Promise.allSettled([
+    getMetrics(filters),
+    getDailyRevenue(filters),
+    getDailyOrders(filters),
+    getDataGrowth(filters),
     getPrediction(),
     getAnomalies(),
+    getCategoryAnalysis(filters),
+    getCustomerSegmentation(filters),
+    getWeekdayAnalysis(filters),
+    getInsights(filters),
+    getRecommendations(filters),
+    getGeoAnalysis(filters),
+    getModelMetrics(),
   ]);
 
   if (metrics.status !== "fulfilled") {
@@ -148,6 +304,18 @@ export async function getDashboardData() {
     dataGrowth: dataGrowth.value,
     prediction: predictionResult.status === "fulfilled" ? predictionResult.value : { predicted_revenue: 0 },
     anomalies: anomaliesResult.status === "fulfilled" ? anomaliesResult.value : [],
+    categoryAnalysis: categoryAnalysisResult.status === "fulfilled" ? categoryAnalysisResult.value : [],
+    customerSegmentation:
+      customerSegmentationResult.status === "fulfilled" ? customerSegmentationResult.value : [],
+    weekdayAnalysis: weekdayAnalysisResult.status === "fulfilled" ? weekdayAnalysisResult.value : [],
+    insights: insightsResult.status === "fulfilled" ? insightsResult.value : [],
+    recommendations:
+      recommendationsResult.status === "fulfilled" ? recommendationsResult.value : [],
+    geoAnalysis: geoAnalysisResult.status === "fulfilled" ? geoAnalysisResult.value : [],
+    modelMetrics:
+      modelMetricsResult.status === "fulfilled"
+        ? modelMetricsResult.value
+        : { mae: null, rmse: null, mape: null, last_trained_at: null },
     predictionError:
       predictionResult.status === "rejected"
         ? "Prediction service unavailable"
@@ -155,6 +323,15 @@ export async function getDashboardData() {
     anomalyError:
       anomaliesResult.status === "rejected"
         ? "Anomaly service unavailable"
+        : null,
+    biError:
+      categoryAnalysisResult.status === "rejected" ||
+      customerSegmentationResult.status === "rejected" ||
+      weekdayAnalysisResult.status === "rejected" ||
+      insightsResult.status === "rejected" ||
+      recommendationsResult.status === "rejected" ||
+      geoAnalysisResult.status === "rejected"
+        ? "Some BI insights are temporarily unavailable"
         : null,
   };
 }
