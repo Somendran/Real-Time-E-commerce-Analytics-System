@@ -251,6 +251,38 @@ The pipeline uses this SQL file when creating the `orders_clean` table.
 
 ## How to Run
 
+### Option A: Docker Compose
+
+Start local Postgres, FastAPI, and Next.js:
+
+```powershell
+docker compose up --build
+```
+
+URLs:
+
+```text
+Frontend: http://localhost:3000
+Backend:  http://127.0.0.1:8000
+API docs: http://127.0.0.1:8000/docs
+```
+
+The Compose setup uses local PostgreSQL:
+
+```text
+postgresql://postgres:postgres@db:5432/ecommerce
+```
+
+To load data into the Docker Postgres database after the services are running:
+
+```powershell
+docker compose exec backend python run_pipeline.py false
+```
+
+Raw CSVs must exist locally in `data/raw/`. They are mounted into the backend container but are not baked into the Docker image.
+
+### Option B: Local Python and Node
+
 ### 1. Prerequisites
 
 - Python 3.10+
@@ -407,9 +439,7 @@ The workflow:
 
 ## Future Improvements
 
-- Add Docker Compose for one-command local startup
-- Add frontend build to GitHub Actions CI
-- Add dashboard screenshots and architecture diagram
+- Add a dedicated architecture diagram image
 - Add model versioning and model registry metadata
 - Add Alembic migrations
 - Add authentication and role-based access

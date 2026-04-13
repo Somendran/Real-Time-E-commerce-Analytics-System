@@ -12,6 +12,7 @@ from psycopg2.pool import ThreadedConnectionPool
 load_dotenv()
 
 DB_URL = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
+DB_SSLMODE = os.getenv("DB_SSLMODE", "require")
 _pool: ThreadedConnectionPool | None = None
 
 
@@ -24,12 +25,12 @@ def _get_pool() -> ThreadedConnectionPool:
     if not DB_URL:
         raise EnvironmentError("Set SUPABASE_DB_URL or DATABASE_URL environment variable.")
 
-    # Supabase PostgreSQL requires SSL.
+    # Supabase requires SSL; local Docker Postgres can set DB_SSLMODE=disable.
     _pool = ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
         dsn=DB_URL,
-        sslmode="require",
+        sslmode=DB_SSLMODE,
     )
     return _pool
 
