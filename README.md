@@ -16,6 +16,38 @@ Dataset source: [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggl
 - Persists an XGBoost revenue prediction model to disk instead of retraining on every request
 - Includes pytest coverage and GitHub Actions CI
 
+## Screenshots
+
+### Dashboard Overview
+
+![Dashboard overview](docs/screenshots/dashboard-overview.png)
+
+Dashboard overview with KPI cards, revenue prediction, and interactive filters.
+
+### Business Intelligence
+
+![Business intelligence section](docs/screenshots/bi-section.png)
+
+BI layer showing category performance, customer segmentation, weekday behavior, and state-level revenue.
+
+### Insights and Recommendations
+
+![Insights and recommendations](docs/screenshots/insights-recommendations.png)
+
+Decision-support layer with automated business insights and recommendations.
+
+### Model Metrics
+
+![Model metrics](docs/screenshots/model-metrics.png)
+
+Persisted ML model metrics showing forecast evaluation and last training time.
+
+### GitHub Actions CI
+
+![GitHub Actions CI](docs/screenshots/github-actions-ci.png)
+
+Automated CI running backend tests and frontend build checks.
+
 ## Architecture
 
 ```text
@@ -347,6 +379,9 @@ The workflow:
 - sets up Python
 - installs `requirements.txt`
 - runs `pytest`
+- sets up Node.js
+- installs frontend dependencies
+- builds the Next.js frontend
 
 ## Business Questions Answered
 
@@ -367,7 +402,7 @@ The workflow:
 - The saved ML model is local to the backend runtime and is not versioned.
 - No authentication or role-based access is implemented yet.
 - Database migrations use a SQL file, not Alembic.
-- CI currently runs backend tests only; frontend build can be added to CI next.
+- CI does not spin up a real PostgreSQL/Supabase database yet.
 - Full local reproduction requires downloading the Olist CSV files from Kaggle.
 
 ## Future Improvements
